@@ -432,13 +432,22 @@ Money endpoints take an `Idempotency-Key` header.
   | `primary-darker` | `#9A3412` | Button hover/pressed |
   | `primary-light` | `#F97316` | Gradient highlight on the balance card, illustrations (never behind small text) |
   | `primary-50` | `#FFF7ED` | Soft tinted backgrounds: selected rows, info boxes |
+  | `canvas` | `#F8FAFC` | Page background behind the phone frame |
   | `surface` | `#FFFFFF` | Main background and cards |
+  | `surface-sunken` | `#F1F5F9` | Loading skeletons, disabled fields, keypad keys |
   | `text` | `#0F172A` | Main text |
-  | `text-muted` | `#64748B` | Secondary text |
-  | `border` | `#E2E8F0` | Dividers, input borders |
-  | `success` / `danger` / `warning` | `#16A34A` / `#DC2626` / `#D97706` | Money in / errors and money out / pending KYC |
+  | `text-muted` | `#64748B` | Secondary text (use `text` on `primary-50` backgrounds) |
+  | `border` | `#E2E8F0` | Dividers and card outlines |
+  | `border-strong` | `#8091A7` | Input and control outlines (3.2:1, WCAG 1.4.11) |
+  | `success` / `warning` | `#16A34A` / `#D97706` | Status icons, fills and badge backgrounds only (fail AA as small text) |
+  | `success-dark` | `#15803D` | Money-in amounts and success text (5.0:1) |
+  | `warning-dark` | `#B45309` | Pending-KYC and warning text (5.0:1) |
+  | `danger` | `#DC2626` | Errors and money-out amounts (4.8:1, fine as text) |
+  | `container-phone` | `420px` | Max width of the phone-width app frame (`max-w-phone`) |
+  | `ease-out-quint` | `cubic-bezier(0.22, 1, 0.36, 1)` | Easing for hover/press (150ms) and reveals (200ms) |
 
   White text on plain `#EA580C` is only 3.6:1 contrast, so it's used only for large text (the balance amount, headings). Buttons use `primary-dark`.
+- **Detailed UI rules:** `design/TASTE.md` (source of truth for visual decisions).
 - **Customer home:** balance card (tap to reveal), action grid (Send Money, Cash Out, Payment, History), recent transactions and a bottom nav (Home · History · Profile).
 - **Transfer flow:** stepper with amount keypad → preview → PIN → success receipt (with a share/print option).
 - **Login page:** "Try demo" buttons for Customer, Agent, Merchant and Admin.

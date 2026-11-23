@@ -1,22 +1,71 @@
 @import "tailwindcss";
 
-/* PocketPay palette (docs/design.md §11). Each token becomes utilities like bg-primary, text-text-muted. */
+/* PocketPay palette (docs/design.md §11). Each token becomes utilities like bg-primary, text-text-muted.
+   This @theme block is the single source of truth for every visual value. Run
+   `node design/check-tokens.mjs` from the repo root to find values that bypass it. */
 @theme {
-  --color-primary: #EA580C;
-  --color-primary-dark: #C2410C;
-  --color-primary-darker: #9A3412;
-  --color-primary-light: #F97316;
-  --color-primary-50: #FFF7ED;
-  --color-surface: #FFFFFF;
+  /* Brand */
+  --color-primary: #EA580C; /* header bar, balance card, icons, large text only (3.6:1 on white) */
+  --color-primary-dark: #C2410C; /* buttons, links, active tab, focus ring (5.2:1 on white) */
+  --color-primary-darker: #9A3412; /* button hover / pressed */
+  --color-primary-light: #F97316; /* balance-card gradient end, illustrations; never behind small text */
+  --color-primary-50: #FFF7ED; /* selected rows, info boxes */
+
+  /* Surfaces */
+  --color-canvas: #F8FAFC; /* page background behind the phone frame */
+  --color-surface: #FFFFFF; /* cards, main background */
+  --color-surface-sunken: #F1F5F9; /* skeletons, disabled fields, keypad keys */
+
+  /* Text and lines */
   --color-text: #0F172A;
-  --color-text-muted: #64748B;
-  --color-border: #E2E8F0;
+  --color-text-muted: #64748B; /* 4.8:1 on white, but only 4.5:1 on primary-50: use text there */
+  --color-border: #E2E8F0; /* dividers and card outlines (decorative) */
+  --color-border-strong: #8091A7; /* input and control outlines, 3.2:1 on white (WCAG 1.4.11) */
+
+  /* Status. Use the base colour for icons, fills and badge backgrounds.
+     Use the -dark colour (or danger) when the status is TEXT: base success/warning are
+     only 3.3:1 and 3.2:1 on white, which fails AA for small text. */
   --color-success: #16A34A;
-  --color-danger: #DC2626;
+  --color-success-dark: #15803D; /* 5.0:1 on white */
+  --color-danger: #DC2626; /* 4.8:1 on white, fine as text */
   --color-warning: #D97706;
+  --color-warning-dark: #B45309; /* 5.0:1 on white */
+
+  /* Layout */
+  --container-phone: 420px; /* phone-width app frame */
+
+  /* Motion. Use with duration-150 (hover, press) or duration-200 (reveals). */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 body {
-  @apply bg-[#F8FAFC] text-text antialiased;
+  @apply bg-canvas text-text antialiased;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* One visible focus style for every interactive element. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-primary-dark); /* design-ok: focus ring definition */
+    outline-offset: 2px; /* design-ok */
+  }
+}
+
+/* Phone safe areas (bottom nav, sticky action bars). Needs viewport-fit=cover in index.html. */
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important; /* design-ok: reduced-motion reset */
+    transition-duration: 0.01ms !important; /* design-ok */
+    scroll-behavior: auto !important;
+  }
 }
