@@ -48,6 +48,7 @@ All of it backed by PostgreSQL through Prisma 7.
   | `OTP_INVALID` (with `details: { attemptsLeft }`) | 400 |
   | `OTP_EXPIRED` | 400 |
   | `OTP_LOCKED` | 429 |
+  | `OTP_SEND_FAILED` | 502 |
   | `REGISTRATION_TOKEN_INVALID` | 401 |
   | `MISSING_FILE` | 400 |
   | `FILE_TOO_LARGE` | 413 |
