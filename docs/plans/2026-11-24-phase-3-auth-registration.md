@@ -51,6 +51,7 @@ All of it backed by PostgreSQL through Prisma 7.
   | `OTP_SEND_FAILED` | 502 |
   | `REGISTRATION_TOKEN_INVALID` | 401 |
   | `MISSING_FILE` | 400 |
+  | `UPLOAD_FAILED` | 502 |
   | `FILE_TOO_LARGE` | 413 |
   | `UNSUPPORTED_FILE_TYPE` | 415 |
   | `INVALID_CREDENTIALS` | 401 |
