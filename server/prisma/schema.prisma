@@ -1,0 +1,166 @@
+// PocketPay database schema — auth tables (docs/design.md §8.2).
+// After editing: npm run db:migrate -- --name <change> && npm run db:generate
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+// No url here: Prisma 7 reads it from prisma.config.ts.
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  CUSTOMER
+  AGENT
+  MERCHANT
+  ADMIN
+}
+
+enum UserStatus {
+  PENDING_KYC
+  ACTIVE
+  FROZEN
+  REJECTED
+}
+
+enum DocumentKind {
+  NID_FRONT
+  NID_BACK
+  SELFIE
+  PROFILE
+}
+
+enum DocumentAccess {
+  PRIVATE
+  PUBLIC
+}
+
+enum KycStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum OtpPurpose {
+  REGISTER
+}
+
+model User {
+  id                String     @id @default(uuid()) @db.Uuid
+  phone             String     @unique
+  nidNumber         String     @unique @map("nid_number")
+  name              String
+  dateOfBirth       DateTime   @map("date_of_birth") @db.Date
+  shopName          String?    @map("shop_name")
+  pinHash           String     @map("pin_hash")
+  role              Role
+  status            UserStatus @default(PENDING_KYC)
+  failedPinAttempts Int        @default(0) @map("failed_pin_attempts")
+  lockedUntil       DateTime?  @map("locked_until") @db.Timestamptz
+  profilePhotoKey   String?    @map("profile_photo_key")
+  createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+
+  documents      UserDocument[]
+  kycSubmissions KycSubmission[] @relation("KycSubmitter")
+  kycReviews     KycSubmission[] @relation("KycReviewer")
+  refreshTokens  RefreshToken[]
+  auditLogs      AuditLog[]
+
+  @@map("users")
+}
+
+model UserDocument {
+  id         String         @id @default(uuid()) @db.Uuid
+  userId     String         @map("user_id") @db.Uuid
+  kind       DocumentKind
+  storageKey String         @map("storage_key")
+  access     DocumentAccess
+  mime       String
+  sizeBytes  Int            @map("size_bytes")
+  width      Int
+  height     Int
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz
+
+  user          User            @relation(fields: [userId], references: [id])
+  kycAsNidFront KycSubmission[] @relation("KycNidFront")
+  kycAsNidBack  KycSubmission[] @relation("KycNidBack")
+  kycAsSelfie   KycSubmission[] @relation("KycSelfie")
+
+  @@index([userId])
+  @@map("user_documents")
+}
+
+model KycSubmission {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  nidFrontId   String    @map("nid_front_id") @db.Uuid
+  nidBackId    String    @map("nid_back_id") @db.Uuid
+  selfieId     String    @map("selfie_id") @db.Uuid
+  status       KycStatus @default(PENDING)
+  reviewedById String?   @map("reviewed_by") @db.Uuid
+  reason       String?
+  submittedAt  DateTime  @default(now()) @map("submitted_at") @db.Timestamptz
+  reviewedAt   DateTime? @map("reviewed_at") @db.Timestamptz
+
+  user       User         @relation("KycSubmitter", fields: [userId], references: [id])
+  reviewedBy User?        @relation("KycReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  nidFront   UserDocument @relation("KycNidFront", fields: [nidFrontId], references: [id])
+  nidBack    UserDocument @relation("KycNidBack", fields: [nidBackId], references: [id])
+  selfie     UserDocument @relation("KycSelfie", fields: [selfieId], references: [id])
+
+  @@index([userId, submittedAt])
+  @@map("kyc_submissions")
+}
+
+model OtpCode {
+  id         String     @id @default(uuid()) @db.Uuid
+  phone      String
+  codeHash   String     @map("code_hash")
+  purpose    OtpPurpose
+  expiresAt  DateTime   @map("expires_at") @db.Timestamptz
+  attempts   Int        @default(0)
+  verifiedAt DateTime?  @map("verified_at") @db.Timestamptz
+  consumedAt DateTime?  @map("consumed_at") @db.Timestamptz
+  createdAt  DateTime   @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([phone, createdAt])
+  @@map("otp_codes")
+}
+
+model RefreshToken {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  tokenHash    String    @unique @map("token_hash")
+  family       String    @db.Uuid
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz
+  replacedById String?   @map("replaced_by") @db.Uuid
+  userAgent    String?   @map("user_agent")
+  ip           String?
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([family])
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @map("actor_id") @db.Uuid
+  action     String
+  targetType String?  @map("target_type")
+  targetId   String?  @map("target_id")
+  metadata   Json?
+  ip         String?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Restrict: users are frozen, never deleted, and audit history must keep its actor.
+  actor User? @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@map("audit_logs")
+}

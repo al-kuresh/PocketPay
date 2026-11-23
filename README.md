@@ -2,7 +2,7 @@
 
 A mobile-first digital wallet (bKash-style) built as a full-stack, production-grade project.
 
-> 🚧 Work in progress — **Phase 2 (repo setup) complete**; next up: Phase 3 (auth + registration).
+> 🚧 Work in progress — **Phase 3 (auth + registration API) complete**; next up: Phase 4 (wallet + ledger).
 
 ## Features (planned for v1)
 - Registration with phone, OTP, 10-digit NID, and NID/selfie photo upload
@@ -18,7 +18,9 @@ A mobile-first digital wallet (bKash-style) built as a full-stack, production-gr
 
 ## Documentation
 - [Design document](docs/design.md)
+- [API reference](docs/api.md)
 - [Phase 2 plan](docs/plans/2026-11-23-phase-2-repo-setup.md)
+- [Phase 3 plan](docs/plans/2026-11-24-phase-3-auth-registration.md)
 
 ## Run locally
 ### Prerequisites
@@ -35,15 +37,62 @@ A mobile-first digital wallet (bKash-style) built as a full-stack, production-gr
    ```bash
    docker compose up -d
    ```
-3. Start the API (on `http://localhost:4000`):
+3. Create the test database (once; a brand-new Docker volume creates it automatically):
    ```bash
-   cd server && cp .env.example .env && npm ci && npm run dev
+   docker compose exec db createdb -U pocketpay pocketpay_test
    ```
-4. In a second terminal, start the web app (on `http://localhost:5173`):
+4. Configure the API, set a real `JWT_SECRET`, and apply the database migrations:
+   ```bash
+   cd server && cp .env.example .env
+   # replace the JWT_SECRET placeholder in .env with the output of:
+   openssl rand -base64 48
+   npm ci && npm run db:deploy
+   ```
+5. Start the API (on `http://localhost:4000`):
+   ```bash
+   npm run dev
+   ```
+6. In a second terminal, start the web app (on `http://localhost:5173`):
    ```bash
    cd client && npm ci && npm run dev
    ```
-5. Open <http://localhost:5173>. You should see **API status: ok**.
+7. Open <http://localhost:5173>. You should see **API status: ok**.
+
+### Try the auth flow with curl
+With the API running (step 5). Uses fake data; never upload a real NID. Any three JPEG photos
+work (the server only checks they are real images). Full reference: [docs/api.md](docs/api.md).
+
+```bash
+API=http://localhost:4000/api/v1
+
+# 1. Request an OTP (in dev the code comes back as devOtp; no SMS is sent)
+curl -s -X POST $API/auth/register/request-otp \
+  -H 'Content-Type: application/json' -d '{"phone":"01700000000"}'
+
+# 2. Verify it (use the devOtp from step 1) and keep the registration token
+REG_TOKEN=$(curl -s -X POST $API/auth/register/verify-otp \
+  -H 'Content-Type: application/json' -d '{"phone":"01700000000","code":"<devOtp>"}' \
+  | sed -E 's/.*"registrationToken":"([^"]+)".*/\1/')
+
+# 3. Complete registration with 3 photos; the refresh cookie goes into cookies.txt
+curl -s -X POST $API/auth/register/complete -H "Authorization: Bearer $REG_TOKEN" \
+  -F name="Test User" -F dateOfBirth=1995-06-15 -F nidNumber=1234567890 \
+  -F role=CUSTOMER -F pin=48213 -F confirmPin=48213 \
+  -F nidFront=@front.jpg -F nidBack=@back.jpg -F selfie=@selfie.jpg \
+  -c cookies.txt
+# → copy "accessToken" from the response
+
+# 4. Who am I?
+curl -s $API/me -H "Authorization: Bearer <accessToken>"
+
+# 5. Refresh (rotates the cookie) and log out
+curl -s -X POST $API/auth/refresh -b cookies.txt -c cookies.txt
+curl -s -X POST $API/auth/logout -b cookies.txt -c cookies.txt -o /dev/null -w '%{http_code}\n'
+```
+
+Uploaded images land in `server/uploads/` (git-ignored). Users can't be deleted (their
+documents and audit history must stay), so to run the flow again use another phone and NID,
+e.g. `01700000001` / `1234567891`.
 
 ### Useful commands
 | Where | Command | What it does |

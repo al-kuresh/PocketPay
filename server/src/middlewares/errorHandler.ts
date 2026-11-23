@@ -1,6 +1,7 @@
 import type { ErrorRequestHandler } from 'express';
 import { AppError } from '../utils/AppError';
 import { env } from '../config/env';
+import { logger } from '../lib/logger';
 
 const BODY_ERRORS: Record<string, { status: number; code: string; message: string } | undefined> = {
   'entity.parse.failed': { status: 400, code: 'INVALID_JSON', message: 'Request body is not valid JSON' },
@@ -28,8 +29,22 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     return;
   }
 
-  req.log?.error(err);
+  const log = req.log ?? logger;
+  const isPrisma = err instanceof Error && err.name.startsWith('PrismaClient');
+  if (isPrisma) {
+    // Prisma messages echo the query's argument values (NID, pinHash): log the shape only.
+    const e = err as { name: string; code?: string; meta?: { modelName?: string } };
+    log.error({ name: e.name, code: e.code, model: e.meta?.modelName }, 'Database error');
+  } else {
+    log.error(err);
+  }
+
+  // Same reason: never send a Prisma message to the client, not even in development.
   const message =
-    env.NODE_ENV === 'production' ? 'Something went wrong' : err instanceof Error ? err.message : String(err);
+    env.NODE_ENV === 'production' || isPrisma
+      ? 'Something went wrong'
+      : err instanceof Error
+        ? err.message
+        : String(err);
   res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message } });
 };
