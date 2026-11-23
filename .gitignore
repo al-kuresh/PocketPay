@@ -25,3 +25,7 @@ Thumbs.db
 # Test / tooling caches
 .vitest/
 *.tsbuildinfo
+
+# Server: Prisma client is generated (npm run db:generate); uploads are local dev files
+server/src/generated/
+server/uploads/
