@@ -11,7 +11,10 @@ const envSchema = z
     OTP_DEV_ECHO: z.stringbool().default(true),
     KYC_AUTO_APPROVE: z.stringbool().default(false),
     STORAGE_DRIVER: z.enum(['local', 'cloudinary']).default('local'),
-    CLOUDINARY_URL: z.string().optional(),
+    CLOUDINARY_URL: z
+      .string()
+      .startsWith('cloudinary://', 'must start with cloudinary://')
+      .optional(),
   })
   .superRefine((e, ctx) => {
     if (e.STORAGE_DRIVER === 'cloudinary' && !e.CLOUDINARY_URL) {

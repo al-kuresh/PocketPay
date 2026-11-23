@@ -36,6 +36,10 @@ describe('parseEnv', () => {
     expect(() => parseEnv({ ...base, STORAGE_DRIVER: 'cloudinary' })).toThrow(/CLOUDINARY_URL/);
   });
 
+  it('rejects a CLOUDINARY_URL that is not a cloudinary:// URL', () => {
+    expect(() => parseEnv({ ...base, CLOUDINARY_URL: 'https://x' })).toThrow(/CLOUDINARY_URL/);
+  });
+
   it('rejects a JWT_SECRET shorter than 32 characters', () => {
     expect(() => parseEnv({ ...base, JWT_SECRET: 'x'.repeat(31) })).toThrow(/JWT_SECRET/);
   });
