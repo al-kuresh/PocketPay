@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+/* PocketPay palette (docs/design.md §11). Each token becomes utilities like bg-primary, text-text-muted. */
+@theme {
+  --color-primary: #EA580C;
+  --color-primary-dark: #C2410C;
+  --color-primary-darker: #9A3412;
+  --color-primary-light: #F97316;
+  --color-primary-50: #FFF7ED;
+  --color-surface: #FFFFFF;
+  --color-text: #0F172A;
+  --color-text-muted: #64748B;
+  --color-border: #E2E8F0;
+  --color-success: #16A34A;
+  --color-danger: #DC2626;
+  --color-warning: #D97706;
+}
+
+body {
+  @apply bg-[#F8FAFC] text-text antialiased;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
