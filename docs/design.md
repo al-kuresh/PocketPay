@@ -161,7 +161,7 @@ Seeded fees are **modelled on bKash's published charges** (checked on 2026-11-23
   - resized to at most 1600px wide and re-encoded to WebP on the server, which also strips EXIF metadata such as GPS location
 - **Storage:** Cloudinary.
   - NID images and selfies are stored as **private (authenticated) assets**. The API gives the admin a short-lived signed URL (5 minutes) when they open a KYC review.
-  - The profile photo is served as a separate public, resized copy.
+  - The profile photo is served as a separate public copy: a 512×512 WebP crop of the selfie.
   - The database stores only the asset id and metadata, never the image itself.
 
 ### 6.7 Admin panel
@@ -277,7 +277,7 @@ PocketPay/
 | API | Express + TypeScript | Most common Node framework |
 | Validation | Zod | One schema validates input and gives TS types |
 | ORM | Prisma | Migrations, type safety, readable schema |
-| Auth | jsonwebtoken + bcrypt (PIN hashing) | Standard |
+| Auth | jsonwebtoken + bcryptjs (PIN hashing) | Standard; bcryptjs is pure JS, so no native build step |
 | Security | helmet, cors, express-rate-limit, cookie-parser | Standard hardening |
 | Uploads | multer (memory storage) + file-type + sharp + Cloudinary SDK | Receive, verify, resize, store images |
 | Logging | pino | Structured logs |
@@ -304,7 +304,7 @@ The API sends amounts as **strings** (e.g. `"150050"` = ৳1,500.50), because Ja
 | `ledger_entries` | id, transaction_id, wallet_id, amount (signed BIGINT: − debit / + credit), balance_after, created_at | The source of truth; each transaction's entries sum to **0** |
 | `fee_rules` | type, flat_fee, percent_bp (basis points), agent_commission_bp, min_amount_for_fee | Configurable fees |
 | `limit_rules` | type, min_amount, max_per_txn, max_count_day, max_count_month, max_amount_day, max_amount_month (NULL = no limit) | Configurable limits |
-| `system_settings` | key, value | e.g. `CUSTOMER_MAX_BALANCE = 50000000` (poisha), `KYC_AUTO_APPROVE` |
+| `system_settings` | key, value | e.g. `CUSTOMER_MAX_BALANCE = 50000000` (poisha). `KYC_AUTO_APPROVE` is an env var, not a row here: it's a deployment choice (demo vs. real), not something an admin toggles |
 | `kyc_submissions` | id, user_id, nid_front_id, nid_back_id, selfie_id (→ user_documents), status (`PENDING/APPROVED/REJECTED`), reviewed_by, reason, submitted_at, reviewed_at | KYC review queue (one row per attempt) |
 | `otp_codes` | id, phone, code_hash, purpose, expires_at, attempts, consumed_at | Registration OTPs |
 | `refresh_tokens` | id, user_id, token_hash, expires_at, revoked_at, replaced_by | Refresh-token rotation and logout |
@@ -468,6 +468,7 @@ Money endpoints take an `Idempotency-Key` header.
   - customer balance cap
   - idempotent retry returns the same transaction
   - **concurrency test:** fire 20 parallel transfers from one wallet, then check the balance is never negative and reconciliation passes
+- **Image storage has three drivers:** tests inject a `MemoryStorage` (nothing leaves the process), local dev uses `LocalStorage` (`STORAGE_DRIVER=local`, files under `server/uploads/`, git-ignored), and production uses Cloudinary (`STORAGE_DRIVER=cloudinary`).
 
 **CI** (GitHub Actions, on every push and PR): install → lint → typecheck → test (with a Postgres service container) → build client.
 
@@ -482,6 +483,10 @@ Money endpoints take an `Idempotency-Key` header.
 - Images → Cloudinary (free tier)
 - Migrations run on deploy; the seed script creates the demo data.
 - Free API hosts may sleep when idle, so the README warns that the first request can take a few seconds.
+
+**Production notes**
+- Rate limits use an in-memory store: counters reset on restart and aren't shared across instances. With more than one instance, use a shared store (Phase 9).
+- Bangladeshi mobile networks use CGNAT (many users share one IP). Before real use, key the login/OTP limits by IP + phone with a more generous per-IP limit (Phase 9).
 
 ---
 
@@ -503,7 +508,7 @@ Money endpoints take an `Idempotency-Key` header.
 | 3 | Auth + registration + uploads | 4-step registration with NID + 3 image uploads to Cloudinary, login, refresh, logout, PIN lockout, role guard; tests pass |
 | 4 | Wallet + ledger | Prisma schema migrated; seed creates system wallets, admin and demo users; ledger service + reconciliation; tests pass |
 | 5 | Money flows | Send Money, Cash In, Cash Out, Payment, preview, idempotency, limits, fees; concurrency test passes |
-| 6 | Frontend screens | All customer, agent and merchant screens connected to the API; works on phone-sized screens |
+| 6 | Frontend screens | All customer, agent and merchant screens connected to the API; works on phone-sized screens; Profile screen with change PIN (PATCH /auth/pin) and change profile photo (PUT /me/photo), including their API endpoints |
 | 7 | Admin panel + KYC review | All admin pages working; KYC review with signed image URLs, approve/reject/resubmit end-to-end |
 | 8 | Tests + CI | Coverage of the critical paths; GitHub Actions green on PRs |
 | 9 | Docker + production config | API Dockerfile; env validation; production logging; CORS/cookies set for the real domains |

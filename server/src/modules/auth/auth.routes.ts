@@ -1,5 +1,6 @@
 import { Router, type RequestHandler } from 'express';
 import { bearerToken } from '../../middlewares/auth';
+import { loginLimiter, otpLimiter } from '../../middlewares/rateLimit';
 import { uploadKycImages } from '../../middlewares/upload';
 import { validateBody } from '../../middlewares/validate';
 import { createAuthController, type AuthDeps } from './auth.controller';
@@ -21,7 +22,12 @@ export function createAuthRouter(deps: AuthDeps): Router {
   const router = Router();
   const auth = createAuthController(deps);
 
-  router.post('/register/request-otp', validateBody(requestOtpBody), auth.requestOtp);
+  router.post(
+    '/register/request-otp',
+    otpLimiter,
+    validateBody(requestOtpBody),
+    auth.requestOtp,
+  );
   router.post('/register/verify-otp', validateBody(verifyOtpBody), auth.verifyOtp);
   // Token first: a cheap check that rejects strangers before multer buffers up to 3 × 2 MB.
   router.post(
@@ -32,7 +38,7 @@ export function createAuthRouter(deps: AuthDeps): Router {
     auth.complete,
   );
 
-  router.post('/login', validateBody(loginBody), auth.login);
+  router.post('/login', loginLimiter, validateBody(loginBody), auth.login);
   // Both read the pp_rt cookie, which is path-scoped to /api/v1/auth.
   router.post('/refresh', auth.refresh);
   router.post('/logout', auth.logout);

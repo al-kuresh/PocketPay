@@ -167,6 +167,12 @@ describe('POST /auth/login', () => {
     ).toBe(3);
   });
 
+  it('does not rate-limit logins in tests (limit is 10 per 15 minutes)', async () => {
+    const results = [];
+    for (let i = 0; i < 11; i++) results.push(await login(PIN, '01898765432'));
+    expect(results.map((r) => r.status)).toEqual(Array(11).fill(401));
+  });
+
   it('rejects a malformed body with VALIDATION_ERROR', async () => {
     const res = await login('12');
     expect(res.status).toBe(400);
