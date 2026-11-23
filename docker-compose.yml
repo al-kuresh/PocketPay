@@ -1,0 +1,23 @@
+# Local development database for PocketPay.
+# Start: docker compose up -d     Stop: docker compose down
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: pocketpay-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pocketpay
+      POSTGRES_PASSWORD: pocketpay
+      POSTGRES_DB: pocketpay
+    ports:
+      - "5433:5432"
+    volumes:
+      - pocketpay_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pocketpay -d pocketpay"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pocketpay_pgdata:

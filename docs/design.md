@@ -281,7 +281,7 @@ PocketPay/
 | Uploads | multer (memory storage) + file-type + sharp + Cloudinary SDK | Receive, verify, resize, store images |
 | Logging | pino | Structured logs |
 | Tests | Vitest + Supertest | Fast, TS-native |
-| Lint/format | ESLint + Prettier | Clean diffs |
+| Lint/format | ESLint (server, TS 6) · oxlint (client, TS 7 — typescript-eslint doesn't support TS 7 yet) · Prettier | Clean diffs |
 
 ---
 
@@ -429,6 +429,7 @@ Money endpoints take an `Idempotency-Key` header.
   |---|---|---|
   | `primary` | `#EA580C` | Brand colour: header bar, balance card, icons, active tab, large text |
   | `primary-dark` | `#C2410C` | Buttons (white text: 5.2:1 contrast, passes WCAG AA), links, pressed states |
+  | `primary-darker` | `#9A3412` | Button hover/pressed |
   | `primary-light` | `#F97316` | Gradient highlight on the balance card, illustrations (never behind small text) |
   | `primary-50` | `#FFF7ED` | Soft tinted backgrounds: selected rows, info boxes |
   | `surface` | `#FFFFFF` | Main background and cards |
