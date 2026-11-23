@@ -11,6 +11,7 @@ import { createStorage, type StorageProvider } from './lib/storage';
 import { LOCAL_UPLOADS_DIR } from './lib/storage/local';
 import { createAuthRouter } from './modules/auth/auth.routes';
 import { healthRouter } from './modules/health/health.routes';
+import { createMeRouter } from './modules/me/me.routes';
 import { notFound } from './middlewares/notFound';
 import { errorHandler } from './middlewares/errorHandler';
 
@@ -56,6 +57,7 @@ export function createApp(deps: AppDeps = {}): Express {
 
   app.use('/api/v1', healthRouter);
   app.use('/api/v1/auth', createAuthRouter(authDeps));
+  app.use('/api/v1/me', createMeRouter({ storage: authDeps.storage }));
 
   app.use(notFound);
   app.use(errorHandler);

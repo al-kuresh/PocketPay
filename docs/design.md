@@ -167,6 +167,7 @@ Seeded fees are **modelled on bKash's published charges** (checked on 2026-11-23
 ### 6.7 Admin panel
 - Dashboard: user counts, today's transaction volume, platform revenue and total float.
 - Users: search, view, freeze or unfreeze.
+- Unlock account (resets PIN lockout).
 - KYC queue: view NID details + the 3 images side by side, then approve or reject with a reason.
 - Transactions: search by TrxID, phone, type or date.
 - Agent float top-up.
@@ -399,7 +400,8 @@ Money endpoints take an `Idempotency-Key` header.
 
 - **PIN** is hashed with bcrypt and never logged or returned. Lockout after 3 failures.
 - **Access token:** JWT, 15-minute life, kept **in memory** on the client (not in localStorage).
-- **Refresh token:** random value, stored **hashed** in the DB, 7-day life, **rotated** on every use, sent as an `httpOnly; Secure; SameSite` cookie. Reusing a revoked token revokes the whole session.
+- Access tokens are stateless (15 min). Every money endpoint (Phase 5) re-reads the user's status inside its DB transaction, so a frozen account can't move money even with a valid access token.
+- **Refresh token:** random value, stored **hashed** in the DB, 7-day life, **rotated** on every use, sent as an `httpOnly; Secure; SameSite` cookie. Presenting an already-rotated token more than 10 seconds after its rotation revokes the whole session (within 10 seconds it's treated as a concurrent refresh from a second tab: that request gets 409 `REFRESH_IN_PROGRESS`, its cookie is left alone, and the client retries once with the new cookie — the Phase 6 client does this).
 - **Hardening:**
   - `helmet` headers.
   - Strict CORS (only the frontend origin).

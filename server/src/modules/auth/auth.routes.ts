@@ -1,14 +1,19 @@
 import { Router, type RequestHandler } from 'express';
+import { bearerToken } from '../../middlewares/auth';
 import { uploadKycImages } from '../../middlewares/upload';
 import { validateBody } from '../../middlewares/validate';
 import { createAuthController, type AuthDeps } from './auth.controller';
-import { completeRegistrationBody, requestOtpBody, verifyOtpBody } from './auth.schemas';
+import {
+  completeRegistrationBody,
+  loginBody,
+  requestOtpBody,
+  verifyOtpBody,
+} from './auth.schemas';
 import { verifyRegistrationToken } from './tokens';
 
 /** `Authorization: Bearer <registrationToken>` → res.locals.registration, or 401. */
 const requireRegistrationToken: RequestHandler = (req, res, next) => {
-  const token = /^Bearer (.+)$/.exec(req.get('authorization') ?? '')?.[1] ?? '';
-  res.locals.registration = verifyRegistrationToken(token);
+  res.locals.registration = verifyRegistrationToken(bearerToken(req));
   next();
 };
 
@@ -26,6 +31,11 @@ export function createAuthRouter(deps: AuthDeps): Router {
     validateBody(completeRegistrationBody),
     auth.complete,
   );
+
+  router.post('/login', validateBody(loginBody), auth.login);
+  // Both read the pp_rt cookie, which is path-scoped to /api/v1/auth.
+  router.post('/refresh', auth.refresh);
+  router.post('/logout', auth.logout);
 
   return router;
 }

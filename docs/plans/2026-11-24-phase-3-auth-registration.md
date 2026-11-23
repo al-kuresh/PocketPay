@@ -60,6 +60,7 @@ All of it backed by PostgreSQL through Prisma 7.
   | `UNAUTHENTICATED` | 401 |
   | `FORBIDDEN` | 403 |
   | `REFRESH_TOKEN_INVALID` | 401 |
+  | `REFRESH_IN_PROGRESS` | 409 |
   | `RATE_LIMITED` | 429 |
 - **Values from the spec:**
   - BD phone: `^01[3-9]\d{8}$`
