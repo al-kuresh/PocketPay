@@ -30,9 +30,10 @@
 - **Lock query (verified):**
   ```sql
   SELECT id, type::text AS type, balance FROM wallets
-  WHERE id = ANY(${ids}::uuid[]) ORDER BY id FOR UPDATE
+  WHERE id = ANY(${ids}::uuid[]) ORDER BY id FOR NO KEY UPDATE
   ```
   It runs with `tx.$queryRaw` inside `prisma.$transaction(async (tx) => …, LEDGER_TX_OPTIONS)`. `balance` comes back as `bigint`. `ORDER BY id` makes Postgres take the locks in id order, which is what prevents deadlocks. Never lock wallets one by one in "from, then to" order.
+  Why `FOR NO KEY UPDATE`, not `FOR UPDATE`: it's the lock a plain `UPDATE` takes, so money operations on a wallet still serialize, but unlike `FOR UPDATE` it doesn't block other sessions' foreign-key checks (`FOR KEY SHARE`) on that wallet (verified on Postgres 16).
 - `LEDGER_TX_OPTIONS = { maxWait: 5_000, timeout: 10_000 }`. Default isolation (READ COMMITTED) plus the row locks is correct; don't use SERIALIZABLE.
 - **Idempotency is checked after the locks are taken** (verified above), and the `@@unique([fromWalletId, idempotencyKey])` index stays as the backstop.
 - **Database guards go in raw SQL appended to a migration** created with `npm run db:migrate -- --create-only --name <name>`. Prisma leaves them alone in later migrations (verified). How their errors surface:
