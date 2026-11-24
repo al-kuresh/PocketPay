@@ -221,13 +221,26 @@ so the client drops it from memory.
 
 ### `GET /me`
 
-The signed-in user. **Auth:** `Authorization: Bearer <accessToken>`.
+The signed-in user and their wallet. **Auth:** `Authorization: Bearer <accessToken>`.
 
 **200**
 
 ```json
-{ "success": true, "data": { "user": { "…PublicUser…": "" } } }
+{
+  "success": true,
+  "data": {
+    "user": { "…PublicUser…": "" },
+    "wallet": { "id": "0b6e4c1a-9d2f-4e3b-8a7c-5f1e2d3c4b5a", "type": "CUSTOMER", "balance": "1000000" }
+  }
+}
 ```
+
+- `wallet.balance` is **poisha as a string**: `"1000000"` is ৳10,000.00. Money is always a
+  string in JSON, because JavaScript numbers can't hold every amount exactly.
+- `wallet.type`: `CUSTOMER` · `AGENT` · `MERCHANT` (the same as the user's role).
+- `wallet` is `null` for admins, who have no wallet.
+
+Login, refresh and registration responses don't include the wallet.
 
 | Error | When |
 |---|---|
@@ -263,6 +276,15 @@ Every code the auth endpoints return:
 | `REFRESH_IN_PROGRESS` | 409 | | **yes, once** (with the new cookie) |
 | `RATE_LIMITED` | 429 | | later (see the `RateLimit` header) |
 
+Money codes. The ledger engine (Phase 4) already raises these; the money endpoints that return
+them arrive in Phase 5:
+
+| Code | HTTP | Details | Retry? |
+|---|---|---|---|
+| `INSUFFICIENT_BALANCE` | 422 | | no: the wallet doesn't have enough money |
+| `WALLET_NOT_FOUND` | 404 | | no |
+| `IDEMPOTENCY_KEY_REUSED` | 409 | | no: the same request key was already used for a different transaction (type, amount or receiver). Use a new key for a new transaction |
+
 Codes any endpoint can return:
 
 | Code | HTTP | When |
@@ -281,7 +303,7 @@ Planned in [design.md §9](design.md#9-api-v1), not implemented yet:
 | Group | Endpoints | Phase |
 |---|---|---|
 | Account | `PATCH /auth/pin` (change PIN), `PUT /me/photo` (replace profile photo) | 6 (with the Profile screen) |
-| Wallet | `GET /wallets/lookup?phone=` | 4–5 |
+| Wallet | `GET /wallets/lookup?phone=` | 5 |
 | Transactions | `POST /transactions/preview`, `/send-money`, `/cash-out`, `/payment`, `/cash-in`; `GET /transactions`, `GET /transactions/:trxId` | 5 |
 | KYC | `GET /kyc`, `POST /kyc/resubmit` | 7 |
 | Admin | `/admin/stats`, `/admin/users`, `/admin/kyc`, `/admin/transactions`, `/admin/agents/:id/float`, `/admin/fees`, `/admin/limits`, `/admin/reconcile`, `/admin/audit-logs` | 7 |

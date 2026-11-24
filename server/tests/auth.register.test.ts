@@ -156,6 +156,12 @@ describe('POST /auth/register/complete', () => {
       (await prisma.otpCode.findFirstOrThrow({ where: { phone: PHONE } })).consumedAt,
     ).not.toBeNull();
 
+    // Exactly one wallet, of the user's role, starting empty.
+    const wallets = await prisma.wallet.findMany({ where: { userId: user.id } });
+    expect(wallets).toHaveLength(1);
+    expect(wallets[0]).toMatchObject({ type: 'CUSTOMER', balance: 0n });
+    expect(await prisma.wallet.count()).toBe(1);
+
     // One audit row, without the NID.
     const audits = await prisma.auditLog.findMany({ where: { action: 'REGISTERED' } });
     expect(audits).toHaveLength(1);
@@ -182,6 +188,16 @@ describe('POST /auth/register/complete', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.data.user).toMatchObject({ status: 'PENDING_KYC', kycStatus: 'PENDING' });
+  });
+
+  it('creates an AGENT wallet for an agent', async () => {
+    const app = makeApp();
+    const res = await complete(app, await registerToToken(app), { fields: { role: 'AGENT' } });
+
+    expect(res.status).toBe(201);
+    const wallets = await prisma.wallet.findMany({ where: { userId: res.body.data.user.id } });
+    expect(wallets).toHaveLength(1);
+    expect(wallets[0]).toMatchObject({ type: 'AGENT', balance: 0n });
   });
 
   it('stores shopName for a merchant', async () => {
@@ -252,6 +268,8 @@ describe('POST /auth/register/complete', () => {
     expect(res.body.error.code).toBe('NID_TAKEN');
     expect(storage.objects.size).toBe(0);
     expect(await prisma.user.count({ where: { phone: PHONE } })).toBe(0);
+    // No wallet either. (user.create fails before wallet.create runs; the rollback test is below.)
+    expect(await prisma.wallet.count()).toBe(0);
   });
 
   it('deletes every uploaded object when an upload fails, and keeps the token usable', async () => {
@@ -272,9 +290,27 @@ describe('POST /auth/register/complete', () => {
     expect(res.body.error.code).toBe('UPLOAD_FAILED');
     expect(storage.objects.size).toBe(0);
     expect(await prisma.user.count()).toBe(0);
+    expect(await prisma.wallet.count()).toBe(0);
     // Nothing was committed, so the same token works once storage is back.
     storage = new MemoryStorage();
     expect((await complete(makeApp(), token)).status).toBe(201);
+  });
+
+  it('rolls the wallet back with the user when a later step in the transaction fails', async () => {
+    // kycSubmission.create runs after tx.wallet.create, so this proves the wallet is in the same
+    // transaction as the rest of the account. NOT VALID: only new rows are checked.
+    await prisma.$executeRaw`ALTER TABLE kyc_submissions ADD CONSTRAINT test_block_insert CHECK (false) NOT VALID`;
+    try {
+      const app = makeApp();
+      const res = await complete(app, await registerToToken(app));
+      expect(res.status).toBe(500); // an unmapped DB error is a 500 INTERNAL_ERROR
+    } finally {
+      await prisma.$executeRaw`ALTER TABLE kyc_submissions DROP CONSTRAINT test_block_insert`;
+    }
+
+    expect(await prisma.user.count()).toBe(0);
+    expect(await prisma.wallet.count()).toBe(0);
+    expect(storage.objects.size).toBe(0); // the uploads were cleaned up
   });
 
   it('logs only the key and access when a cleanup delete fails', async () => {

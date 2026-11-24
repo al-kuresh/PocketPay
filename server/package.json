@@ -13,6 +13,9 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
+    "db:seed": "prisma db seed",
+    "db:reset": "prisma migrate reset",
+    "ledger:check": "tsx src/scripts/ledger-check.ts",
     "postinstall": "prisma generate"
   },
   "license": "UNLICENSED",

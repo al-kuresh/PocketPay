@@ -4,6 +4,7 @@ import { writeAudit } from '../../lib/audit';
 import { processImage } from '../../lib/images';
 import { logger } from '../../lib/logger';
 import { prisma } from '../../lib/prisma';
+import { violatedUniqueIndex } from '../../lib/prismaErrors';
 import type { StorageProvider } from '../../lib/storage';
 import { AppError } from '../../utils/AppError';
 import type { completeRegistrationBody } from './auth.schemas';
@@ -24,15 +25,6 @@ const tokenInvalid = () =>
 const phoneTaken = () =>
   new AppError(409, 'PHONE_TAKEN', 'An account with this phone number already exists');
 const nidTaken = () => new AppError(409, 'NID_TAKEN', 'An account with this NID already exists');
-
-/** Prisma 7 with a driver adapter: P2002 has no meta.target; the constraint name is here. */
-function violatedUniqueIndex(err: unknown): string | undefined {
-  const e = err as {
-    code?: string;
-    meta?: { driverAdapterError?: { cause?: { constraint?: { index?: string } } } };
-  };
-  return e?.code === 'P2002' ? e.meta?.driverAdapterError?.cause?.constraint?.index : undefined;
-}
 
 export async function completeRegistration(input: {
   claims: RegistrationClaims;
@@ -137,6 +129,9 @@ export async function completeRegistration(input: {
           profilePhotoKey: profile.key,
         },
       });
+      // Registration roles are a subset of wallet types; balance starts at 0 (the one write
+      // to wallets outside postTransaction).
+      await tx.wallet.create({ data: { userId, type: body.role } });
       await tx.userDocument.createMany({
         data: objects.map((o) => ({
           id: o.id,
