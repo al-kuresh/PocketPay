@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { toAsciiDigits } from '../../utils/digits';
-import { dhakaToday } from '../../utils/time';
+import { dhakaToday, isCalendarDate } from '../../utils/time';
 
 /** Convert Bangla digits to ASCII before `schema` runs its regex and refine checks. */
 const asciiDigits = <T extends z.ZodType>(schema: T) =>
@@ -27,12 +27,6 @@ export const pinSchema = asciiDigits(
       'PIN cannot be a sequence like 12345 or 54321',
     ),
 );
-
-/** True when `s` is a real calendar date (rejects 2026-02-30). Parsed as UTC, never local time. */
-const isCalendarDate = (s: string) => {
-  const d = new Date(s);
-  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
-};
 
 /** `YYYY-MM-DD`, minus `years` years, as a string (same month and day). */
 const yearsBefore = (isoDate: string, years: number) =>
