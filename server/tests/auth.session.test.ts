@@ -7,6 +7,7 @@ import { MemoryStorage } from '../src/lib/storage/memory';
 import { hashPin } from '../src/modules/auth/pin';
 import { signRegistrationToken, verifyAccessToken } from '../src/modules/auth/tokens';
 import { resetDb } from './helpers/db';
+import { createSystemWallets, fund } from './helpers/wallets';
 
 const PHONE = '01712345678';
 const NID = '1234567890';
@@ -336,5 +337,29 @@ describe('GET /me', () => {
     expect(body).not.toContain(NID);
     expect(body).not.toContain('pinHash');
     expect(body).not.toContain('dateOfBirth');
+  });
+
+  it('returns the wallet balance as a poisha string', async () => {
+    await createSystemWallets();
+    const user = await seedUser();
+    const wallet = await prisma.wallet.create({ data: { userId: user.id, type: 'CUSTOMER' } });
+    await fund(wallet.id, 100_000n, user.id); // ৳1,000
+    const { accessToken } = (await login()).body.data;
+
+    const res = await request(app).get('/api/v1/me').set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.wallet).toEqual({ id: wallet.id, type: 'CUSTOMER', balance: '100000' });
+  });
+
+  it('returns wallet: null for an admin', async () => {
+    await seedUser({ role: 'ADMIN' });
+    const { accessToken } = (await login()).body.data;
+
+    const res = await request(app).get('/api/v1/me').set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.user.role).toBe('ADMIN');
+    expect(res.body.data.wallet).toBeNull();
   });
 });

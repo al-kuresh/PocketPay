@@ -129,6 +129,9 @@ export async function completeRegistration(input: {
           profilePhotoKey: profile.key,
         },
       });
+      // Registration roles are a subset of wallet types; balance starts at 0 (the one write
+      // to wallets outside postTransaction).
+      await tx.wallet.create({ data: { userId, type: body.role } });
       await tx.userDocument.createMany({
         data: objects.map((o) => ({
           id: o.id,

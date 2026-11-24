@@ -156,6 +156,12 @@ describe('POST /auth/register/complete', () => {
       (await prisma.otpCode.findFirstOrThrow({ where: { phone: PHONE } })).consumedAt,
     ).not.toBeNull();
 
+    // Exactly one wallet, of the user's role, starting empty.
+    const wallets = await prisma.wallet.findMany({ where: { userId: user.id } });
+    expect(wallets).toHaveLength(1);
+    expect(wallets[0]).toMatchObject({ type: 'CUSTOMER', balance: 0n });
+    expect(await prisma.wallet.count()).toBe(1);
+
     // One audit row, without the NID.
     const audits = await prisma.auditLog.findMany({ where: { action: 'REGISTERED' } });
     expect(audits).toHaveLength(1);
@@ -182,6 +188,16 @@ describe('POST /auth/register/complete', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.data.user).toMatchObject({ status: 'PENDING_KYC', kycStatus: 'PENDING' });
+  });
+
+  it('creates an AGENT wallet for an agent', async () => {
+    const app = makeApp();
+    const res = await complete(app, await registerToToken(app), { fields: { role: 'AGENT' } });
+
+    expect(res.status).toBe(201);
+    const wallets = await prisma.wallet.findMany({ where: { userId: res.body.data.user.id } });
+    expect(wallets).toHaveLength(1);
+    expect(wallets[0]).toMatchObject({ type: 'AGENT', balance: 0n });
   });
 
   it('stores shopName for a merchant', async () => {
@@ -252,6 +268,8 @@ describe('POST /auth/register/complete', () => {
     expect(res.body.error.code).toBe('NID_TAKEN');
     expect(storage.objects.size).toBe(0);
     expect(await prisma.user.count({ where: { phone: PHONE } })).toBe(0);
+    // The wallet rolled back with the user.
+    expect(await prisma.wallet.count()).toBe(0);
   });
 
   it('deletes every uploaded object when an upload fails, and keeps the token usable', async () => {
@@ -272,6 +290,7 @@ describe('POST /auth/register/complete', () => {
     expect(res.body.error.code).toBe('UPLOAD_FAILED');
     expect(storage.objects.size).toBe(0);
     expect(await prisma.user.count()).toBe(0);
+    expect(await prisma.wallet.count()).toBe(0);
     // Nothing was committed, so the same token works once storage is back.
     storage = new MemoryStorage();
     expect((await complete(makeApp(), token)).status).toBe(201);
