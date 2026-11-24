@@ -236,15 +236,18 @@ PocketPay/
 │   │   ├── modules/
 │   │   │   ├── auth/            # *.routes.ts, *.controller.ts, *.service.ts, *.schema.ts
 │   │   │   ├── users/
+│   │   │   ├── ledger/          # the money engine: postTransaction + reconciliation
 │   │   │   ├── wallets/
-│   │   │   ├── transactions/    # the money engine lives here
+│   │   │   ├── transactions/    # the money flows (Phase 5), built on ledger/
 │   │   │   ├── kyc/
 │   │   │   └── admin/
+│   │   ├── db/seed.ts           # seed functions: system wallets, fees, limits, demo users + money
+│   │   ├── scripts/             # ledger-check.ts (npm run ledger:check)
 │   │   └── utils/               # money (poisha), trxId generator, AppError, time (Asia/Dhaka)
 │   ├── prisma/
 │   │   ├── schema.prisma
 │   │   ├── migrations/
-│   │   └── seed.ts              # admin, demo users, system wallets, fees, limits
+│   │   └── seed.ts              # entry point for npm run db:seed (calls src/db/seed.ts)
 │   ├── tests/                   # integration tests (Vitest + Supertest)
 │   ├── Dockerfile
 │   └── package.json
@@ -297,21 +300,22 @@ The API sends amounts as **strings** (e.g. `"150050"` = ৳1,500.50), because Ja
 
 | Table | Key columns | Purpose |
 |---|---|---|
-| `users` | id (uuid), phone (unique), **nid_number (unique, 10 digits)**, name, date_of_birth, shop_name (merchants), pin_hash, role, status, failed_pin_attempts, locked_until, profile_photo_id, created_at | One row per person (and admin) |
+| `users` | id (uuid), phone (unique), **nid_number (unique, 10 digits)**, name, date_of_birth, shop_name (merchants), pin_hash, role, status, failed_pin_attempts, locked_until, profile_photo_key, created_at, updated_at | One row per person (and admin) |
 | `user_documents` | id, user_id, kind (`NID_FRONT/NID_BACK/SELFIE/PROFILE`), storage_key (Cloudinary public_id), access (`PRIVATE/PUBLIC`), mime, size_bytes, width, height, created_at | Metadata for uploaded images |
-| `wallets` | id, user_id (nullable for system wallets), type (`CUSTOMER/AGENT/MERCHANT/SYSTEM_FEES/SYSTEM_FLOAT`), balance (BIGINT, cached), version, created_at | Holds each account's balance |
-| `transactions` | id, trx_id (unique, human-readable), type, status (`COMPLETED/FAILED/REVERSED`), amount, fee, from_wallet_id, to_wallet_id, initiated_by, idempotency_key, note, created_at | One row per business event |
-| `ledger_entries` | id, transaction_id, wallet_id, amount (signed BIGINT: − debit / + credit), balance_after, created_at | The source of truth; each transaction's entries sum to **0** |
+| `wallets` | id, user_id (unique; NULL for system wallets), type (`CUSTOMER/AGENT/MERCHANT/SYSTEM_FEES/SYSTEM_FLOAT`), balance (BIGINT, cached), created_at. No `version` column: concurrency is handled by row locks (§8.4), not optimistic versioning | Holds each account's balance |
+| `transactions` | id, trx_id (unique, human-readable), type, status (`COMPLETED/FAILED/REVERSED`), amount, fee, from_wallet_id, to_wallet_id, initiated_by (→ users: who pressed confirm, e.g. the agent for a Cash In, the admin for a Float Top-up), idempotency_key, note, created_at | One row per business event |
+| `ledger_entries` | id, seq (BIGINT, auto-increment, unique), transaction_id, wallet_id, amount (signed BIGINT: − debit / + credit; never 0), balance_after, created_at. `seq` is the true order of a wallet's entries: it's assigned at insert under the wallet lock, while `created_at` is the DB transaction's start time, so a transfer that waited for a lock can carry an earlier timestamp | The source of truth; each transaction's entries sum to **0** |
 | `fee_rules` | type, flat_fee, percent_bp (basis points), agent_commission_bp, min_amount_for_fee | Configurable fees |
 | `limit_rules` | type, min_amount, max_per_txn, max_count_day, max_count_month, max_amount_day, max_amount_month (NULL = no limit) | Configurable limits |
 | `system_settings` | key, value | e.g. `CUSTOMER_MAX_BALANCE = 50000000` (poisha). `KYC_AUTO_APPROVE` is an env var, not a row here: it's a deployment choice (demo vs. real), not something an admin toggles |
 | `kyc_submissions` | id, user_id, nid_front_id, nid_back_id, selfie_id (→ user_documents), status (`PENDING/APPROVED/REJECTED`), reviewed_by, reason, submitted_at, reviewed_at | KYC review queue (one row per attempt) |
-| `otp_codes` | id, phone, code_hash, purpose, expires_at, attempts, consumed_at | Registration OTPs |
-| `refresh_tokens` | id, user_id, token_hash, expires_at, revoked_at, replaced_by | Refresh-token rotation and logout |
+| `otp_codes` | id, phone, code_hash, purpose, expires_at, attempts, verified_at, consumed_at, created_at | Registration OTPs |
+| `refresh_tokens` | id, user_id, token_hash, family (one login session), expires_at, revoked_at, replaced_by, user_agent, ip, created_at | Refresh-token rotation and logout |
 | `audit_logs` | id, actor_id, action, target_type, target_id, metadata (JSON), ip, created_at | Who did what and when |
 
 Unique constraint: `(from_wallet_id, idempotency_key)` on `transactions`.
-Indexes: `transactions(created_at)`, `transactions(from_wallet_id, created_at)`, `transactions(to_wallet_id, created_at)`, `ledger_entries(wallet_id, created_at)`.
+Indexes: `transactions(created_at)`, `transactions(from_wallet_id, created_at)`, `transactions(to_wallet_id, created_at)`, `ledger_entries(wallet_id, seq)`, `ledger_entries(wallet_id, created_at)`, `ledger_entries(transaction_id)`.
+ER diagram of every table: [diagrams/erd.md](diagrams/erd.md).
 
 ### 8.3 Ledger examples (double-entry)
 
@@ -337,21 +341,63 @@ Indexes: `transactions(created_at)`, `transactions(from_wallet_id, created_at)`,
 SYSTEM_FLOAT is allowed to go negative: it represents e-money issued against real cash held by the company.
 
 ### 8.4 How one transfer runs (the important part)
-Everything below happens inside **one PostgreSQL transaction**. If any step fails, nothing is saved.
+Money moves only through **`postTransaction`** (`server/src/modules/ledger/ledger.service.ts`), the
+one function that writes `transactions`, `ledger_entries` or `wallets.balance` (the only other
+write is creating a wallet with balance 0). It is pure accounting: it knows nothing about fees,
+limits, PINs or roles. Each money flow (Phase 5) does its business checks and hands it the
+postings (e.g. the rows in §8.3).
 
-1. Validate input (Zod) and check both users are `ACTIVE` and the roles match the flow.
-2. Verify the PIN with bcrypt. A wrong PIN increments the attempts counter and may lock the account.
-3. **Idempotency:** if a transaction with this `(from_wallet, idempotency_key)` already exists, return it instead of creating a new one. The client generates one UUID per confirm screen, so a double tap or a network retry is safe.
-4. **Lock both wallets** with `SELECT ... FOR UPDATE`, **always in ascending id order** so two opposite transfers can't deadlock. Prisma's query API has no row locks, so this step uses `prisma.$queryRaw` inside `prisma.$transaction`.
-5. Calculate the fee from `fee_rules` and check `limit_rules` (sum of today's and this month's completed transactions, Asia/Dhaka time).
-6. Check the sender's balance ≥ amount + fee, and that a customer receiver won't go above the ৳5,00,000 balance cap.
-7. Insert the `transactions` row and its `ledger_entries` (assert the sum = 0), and update each wallet's cached `balance`.
-8. Commit, then write an audit log entry and return the receipt.
+**In the flow, before `postTransaction`** (Phase 5):
+1. Validate the request (Zod) and verify the PIN with bcrypt. A wrong PIN increments the attempts counter and may lock the account.
+2. Calculate the fee from `fee_rules` and build the postings.
 
-**Reconciliation** (admin button + script):
-- For every wallet, `balance` must equal `SUM(ledger_entries.amount)`.
-- The sum over all wallets must be 0.
-- Any mismatch is reported.
+**In `postTransaction`:**
+
+3. **Validate the postings before touching the DB:** at least 2; one per wallet; `from` ≠ `to`; both `from` and `to` have a posting; no posting is 0; they **sum to 0**; amount > 0; fee ≥ 0; idempotency key 1–100 characters; note ≤ 50. A violation is a bug in the calling code, so it is a plain error (500), not a user-facing code.
+4. Open **one PostgreSQL transaction** (READ COMMITTED; the row locks make SERIALIZABLE unnecessary). If any later step fails, nothing is saved.
+5. **Lock every posting wallet in one query:**
+   ```sql
+   SELECT id, type::text AS type, balance FROM wallets
+   WHERE id = ANY($ids::uuid[]) ORDER BY id FOR NO KEY UPDATE
+   ```
+   - `ORDER BY id`: every transaction takes its locks in the same global order, so two opposite transfers (A→B and B→A) can't deadlock. A control test locks "from, then to" instead and deadlocks (`40P01`).
+   - `FOR NO KEY UPDATE`, not `FOR UPDATE`: it's the lock a plain `UPDATE` takes, so money operations on the same wallet still run one at a time, but it doesn't block other sessions' foreign-key checks (`FOR KEY SHARE`) on that wallet, e.g. another transaction inserting a row that references it.
+   - Prisma's query API has no row locks, so this uses `tx.$queryRaw` inside `prisma.$transaction`. A wallet that isn't found → `404 WALLET_NOT_FOUND`.
+6. **Idempotency, checked after the lock:** if a transaction with this `(from_wallet, idempotency_key)` exists with the same type, amount and receiver, return it (a replay). With any difference → `409 IDEMPOTENCY_KEY_REUSED`. Checking under the lock means a parallel duplicate waits on the "from" wallet, then sees the committed row: 5 identical requests at once give 1 transaction and 4 replays. The client generates one UUID per confirm screen, so a double tap or a network retry is safe. The unique index on `(from_wallet_id, idempotency_key)` is the backstop.
+7. **The guard hook:** the flow's `guard` callback runs here, under the locks and before anything is written, with the locked balances. Phase 5 puts its checks here: both users `ACTIVE` and roles matching the flow; `limit_rules` (sum of today's and this month's completed transactions, Asia/Dhaka time); the ৳5,00,000 customer balance cap. Throwing aborts everything.
+8. **Balance check:** each wallet's balance plus its posting must stay ≥ 0, except `SYSTEM_FLOAT` → otherwise `422 INSUFFICIENT_BALANCE`.
+9. Insert the `transactions` row and its `ledger_entries` (each with `balance_after`), and set each wallet's cached `balance` to the computed value.
+10. **Commit.** The deferred zero-sum trigger (§8.5) checks the entries here. If the random `trx_id` already exists, the whole transaction is retried with a new one (up to 3 attempts).
+
+**In the flow, after commit** (Phase 5): write an audit log entry and return the receipt.
+
+**Reconciliation** (`reconcileLedger()`, run by `npm run ledger:check`; an admin button in Phase 7). Four SQL aggregates, all in **one `REPEATABLE READ` transaction**, so they read the same snapshot and the report is consistent even while money is moving:
+1. Every wallet's cached `balance` equals the sum of its entries (a wallet with no entries must be 0).
+2. Every wallet's latest entry (highest `seq`) has `balance_after` equal to its `balance`.
+3. Every transaction's entries sum to 0, and there are at least 2 of them (this also catches a transaction with no entries).
+4. The sum of all entries is 0, and so is the sum of all cached balances (the float's negative balance is the e-money it issued).
+
+The report is `ok` only when all four pass. Every mismatch is listed, and the script exits with code 1.
+
+### 8.5 Database guards
+Application code is the first line of defence; these are the last. They are raw SQL in two
+migrations (Prisma can't express them, and leaves them alone in later migrations). A violated
+check or trigger reaches the app as Prisma error `P2039`.
+
+In `…_ledger_core` (7 guards):
+1. `wallets_balance_non_negative` (CHECK): only `SYSTEM_FLOAT` may go below 0. Catches a bug in the balance check.
+2. `wallets_owner_matches_type` (CHECK): user wallets have a `user_id`, system wallets don't. No ownerless customer wallet, no user-owned fee wallet.
+3. `wallets_system_type_key` (partial unique index, `WHERE user_id IS NULL`): exactly one wallet per system type, so fees and float can't split across two rows.
+4. `transactions_amount_positive` (CHECK `amount > 0`): a zero or negative amount would be meaningless or reverse the direction.
+5. `transactions_fee_non_negative` (CHECK `fee >= 0`): a negative fee would pay the user out of the fee wallet.
+6. `ledger_entries_no_update_delete` (trigger, `BEFORE UPDATE OR DELETE`): the ledger is append-only, so history can't be rewritten. Mistakes are fixed with a new transaction. (`TRUNCATE`, used by the tests, still works.)
+7. `ledger_entries_sum_zero` (constraint trigger, `DEFERRABLE INITIALLY DEFERRED`): each transaction's entries sum to 0, checked at COMMIT once all of them are inserted. This is the double-entry rule, enforced by the database.
+
+In `…_ledger_entry_amount_nonzero`:
+
+8. `ledger_entries_amount_nonzero` (CHECK `amount <> 0`): a zero entry moves nothing, and a transaction made of a single 0 entry would pass the zero-sum trigger.
+
+(The migration's own comments number these differently: they count both transaction checks as one item, and their item 7 is a one-off backfill of wallets for existing users, not a guard.)
 
 ---
 
@@ -553,6 +599,9 @@ Money endpoints take an `Idempotency-Key` header.
 - F. Agent commission is 0.40% of the cash-out amount (my assumption; no public figure found).
 - G. Customer wallet balance is capped at ৳5,00,000, as bKash does.
 - H. "Priyo Agent" discounted cash-out (bKash charges ৳13.95 per ৳1,000 up to ৳50,000 a month) is left for v2.
+
+**Phase 4 build (2026-11-24):**
+- I. **Row locks + DB guards instead of optimistic versioning.** `wallets.version` is dropped. Wallets are locked with `SELECT … ORDER BY id FOR NO KEY UPDATE` (§8.4), so concurrent operations on a wallet wait instead of failing and retrying. The database guards in §8.5 refuse negative, unbalanced or edited ledger data even if the code has a bug.
 
 ## 16. Left to the builder
 - Exact component styling within the §11 palette (decided in Phase 6).
