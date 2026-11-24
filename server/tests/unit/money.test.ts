@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { percentOfBp, poishaSchema, poishaToString, taka } from '../../src/utils/money';
+import { formatTaka, percentOfBp, poishaSchema, poishaToString, taka } from '../../src/utils/money';
 
 describe('percentOfBp', () => {
   it('computes the cash-out fee and agent commission from design §8.3', () => {
@@ -53,5 +53,14 @@ describe('poishaSchema', () => {
     const result = poishaSchema.safeParse(input);
     expect(result.success).toBe(false);
     expect(result.error?.issues[0]?.message).toBe(MESSAGE);
+  });
+});
+
+describe('formatTaka', () => {
+  it('formats poisha as taka with Bangladeshi digit grouping', () => {
+    expect(formatTaka(10_000_000n)).toBe('৳1,00,000.00');
+    expect(formatTaka('150050')).toBe('৳1,500.50');
+    expect(formatTaka(-5n)).toBe('-৳0.05');
+    expect(formatTaka(0n)).toBe('৳0.00');
   });
 });

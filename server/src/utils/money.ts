@@ -26,6 +26,14 @@ export function poishaToString(p: bigint): string {
   return p.toString();
 }
 
+/** Poisha → "৳1,00,000.00" (Bangladeshi digit grouping). For scripts and logs, not the API. */
+export function formatTaka(poisha: bigint | string): string {
+  const p = BigInt(poisha);
+  const abs = p < 0n ? -p : p;
+  const whole = new Intl.NumberFormat('en-IN').format(abs / 100n);
+  return `${p < 0n ? '-' : ''}৳${whole}.${(abs % 100n).toString().padStart(2, '0')}`;
+}
+
 const POISHA_MESSAGE = 'Amount must be a whole number of poisha, e.g. "150050" for ৳1,500.50';
 
 /** A request-body amount: a string of 1–15 digits, parsed to a bigint > 0. */

@@ -3,14 +3,7 @@
 import 'dotenv/config'; // must be first: loads .env before env.ts reads process.env
 import { prisma } from '../lib/prisma';
 import { reconcileLedger } from '../modules/ledger/reconcile';
-
-/** Poisha → "৳1,00,000.00" (Bangladeshi digit grouping). */
-function formatTaka(poisha: bigint | string): string {
-  const p = BigInt(poisha);
-  const abs = p < 0n ? -p : p;
-  const whole = new Intl.NumberFormat('en-IN').format(abs / 100n);
-  return `${p < 0n ? '-' : ''}৳${whole}.${(abs % 100n).toString().padStart(2, '0')}`;
-}
+import { formatTaka } from '../utils/money';
 
 try {
   const r = await reconcileLedger();
