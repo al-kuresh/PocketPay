@@ -91,7 +91,7 @@ erDiagram
         uuid id PK
         string trx_id UK "human-readable"
         TransactionType type "SEND_MONEY | CASH_IN | CASH_OUT | PAYMENT | FLOAT_TOPUP"
-        TransactionStatus status "COMPLETED | FAILED | REVERSED"
+        TransactionStatus status "COMPLETED | REVERSED"
         bigint amount "> 0"
         bigint fee ">= 0"
         uuid from_wallet_id FK "UK with idempotency_key"
