@@ -1,4 +1,4 @@
-// reconcileLedger: the four SQL checks that prove no money was created or lost, and the
+// reconcileLedger: the five SQL checks that prove no money was created or lost, and the
 // ledger:check script that runs them from the command line. Tampering is done with direct
 // SQL/Prisma writes, skipping postTransaction, the way a bug or a manual edit would.
 import { spawnSync } from 'node:child_process';
@@ -69,6 +69,7 @@ describe('reconcileLedger', () => {
       checkedTransactions: 0,
       walletMismatches: [],
       lastBalanceMismatches: [],
+      chainBreaks: [],
       unbalancedTransactions: [],
       ledgerTotal: '0',
       cachedTotal: '0',
@@ -115,6 +116,7 @@ describe('reconcileLedger', () => {
         checkedTransactions: 3,
         walletMismatches: [],
         lastBalanceMismatches: [],
+        chainBreaks: [],
         unbalancedTransactions: [],
         ledgerTotal: '0',
         cachedTotal: '0',
@@ -150,6 +152,33 @@ describe('reconcileLedger', () => {
       expect(report.walletMismatches).toEqual([]);
       expect(report.lastBalanceMismatches).toEqual([
         { walletId: f.alice.wallet.id, cached: '100', lastBalanceAfter: '999' },
+      ]);
+    });
+
+    it('reports a broken balance_after chain even when the sums and the latest entry agree', async () => {
+      await writeRaw(f, [
+        { walletId: f.float.id, amount: -100n, balanceAfter: -100n },
+        { walletId: f.alice.wallet.id, amount: 100n, balanceAfter: 100n },
+      ]);
+      await writeRaw(f, [
+        { walletId: f.float.id, amount: -50n, balanceAfter: -150n },
+        { walletId: f.alice.wallet.id, amount: 50n, balanceAfter: 999n }, // should be 150
+      ]);
+      await writeRaw(f, [
+        { walletId: f.float.id, amount: -10n, balanceAfter: -160n },
+        { walletId: f.alice.wallet.id, amount: 10n, balanceAfter: 160n },
+      ]);
+      await setBalance(f.float.id, -160n);
+      await setBalance(f.alice.wallet.id, 160n);
+
+      const report = await reconcileLedger();
+      expect(report.walletMismatches).toEqual([]);
+      expect(report.lastBalanceMismatches).toEqual([]);
+      expect(report.ok).toBe(false);
+      // The bad entry, and the next one (whose previous balance is the bad 999).
+      expect(report.chainBreaks.map((b) => [b.walletId, b.balanceAfter, b.expected])).toEqual([
+        [f.alice.wallet.id, '999', '150'],
+        [f.alice.wallet.id, '160', '1009'],
       ]);
     });
 

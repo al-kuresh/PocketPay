@@ -182,6 +182,16 @@ describe('postTransaction', () => {
         },
         /must not be 0/,
       ],
+      [
+        'the from wallet credited and the to wallet debited',
+        {
+          postings: [
+            { walletId: a, amount: 100n },
+            { walletId: b, amount: -100n },
+          ],
+        },
+        /must be debited/,
+      ],
       ['the same wallet as from and to', { toWalletId: a }, /different wallets/],
       ['a zero amount', { amount: 0n }, /amount must be > 0/],
       ['a negative fee', { fee: -1n }, /fee must be >= 0/],
@@ -199,7 +209,7 @@ describe('postTransaction', () => {
   describe('guard', () => {
     it('receives the locked wallets with their balances', async () => {
       await fund(f.alice.wallet.id, 5_000n, f.alice.user.id);
-      let seen: Map<string, LockedWallet> | undefined;
+      let seen: ReadonlyMap<string, Readonly<LockedWallet>> | undefined;
 
       await postTransaction(
         aliceToBob(1_000n, {
@@ -239,6 +249,41 @@ describe('postTransaction', () => {
       expect(await prisma.transaction.count()).toBe(1);
       expect(await prisma.ledgerEntry.count()).toBe(2);
       expect(await balanceOf(f.alice.wallet.id)).toBe(5_000n);
+    });
+
+    it("can't change the balances the ledger checks and writes", async () => {
+      await fund(f.alice.wallet.id, 5_000n, f.alice.user.id);
+
+      const err = await caught(
+        postTransaction(
+          aliceToBob(10_000n, {
+            guard: async ({ wallets }) => {
+              // A buggy guard: if this worked, Alice could spend ৳100 she doesn't have.
+              (wallets.get(f.alice.wallet.id) as LockedWallet).balance = 1_000_000n;
+            },
+          }),
+        ),
+      );
+
+      expect(err).toBeInstanceOf(TypeError);
+      expect(await prisma.transaction.count()).toBe(1);
+      expect(await balanceOf(f.alice.wallet.id)).toBe(5_000n);
+      expect(await balanceOf(f.bob.wallet.id)).toBe(0n);
+    });
+
+    it('gets its own copy of the map, so changing the map does not change the posting', async () => {
+      await fund(f.alice.wallet.id, 5_000n, f.alice.user.id);
+
+      await postTransaction(
+        aliceToBob(1_000n, {
+          guard: async ({ wallets }) => {
+            (wallets as Map<string, LockedWallet>).delete(f.bob.wallet.id);
+          },
+        }),
+      );
+
+      expect(await balanceOf(f.alice.wallet.id)).toBe(4_000n);
+      expect(await balanceOf(f.bob.wallet.id)).toBe(1_000n);
     });
   });
 

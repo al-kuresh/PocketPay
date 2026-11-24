@@ -12,6 +12,37 @@ import { taka } from '../utils/money';
 
 export const DEMO_PIN = '48213';
 
+const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
+
+/**
+ * The demo accounts have a published PIN, and one of them is an ADMIN, so they only go into a
+ * local database, or one whose host is listed in DEMO_SEED_ALLOWED_HOSTS (comma-separated, exact
+ * match). Checks the target database, not just NODE_ENV: a laptop with NODE_ENV unset can still
+ * point DATABASE_URL at a hosted database.
+ */
+export function assertDemoSeedAllowed(env: NodeJS.ProcessEnv = process.env): void {
+  if (env.NODE_ENV === 'production') {
+    throw new Error(
+      'Demo seeding is disabled in production; Phase 10 decides how the live demo is seeded',
+    );
+  }
+  let host = '';
+  try {
+    host = new URL(env.DATABASE_URL ?? '').hostname;
+  } catch {
+    // Not a URL. The parse error carries the raw string (password included), so it is dropped.
+  }
+  if (!host) throw new Error('Demo seeding refused: DATABASE_URL has no host');
+  const extra = (env.DEMO_SEED_ALLOWED_HOSTS ?? '').split(',').map((h) => h.trim());
+  if (![...LOCAL_HOSTS, ...extra.filter(Boolean)].includes(host)) {
+    // The hostname only: the full URL contains the database password.
+    throw new Error(
+      `Demo seeding only runs against a local database, not "${host}". ` +
+        'To allow this host, add it to DEMO_SEED_ALLOWED_HOSTS',
+    );
+  }
+}
+
 const free = { flatFee: 0n, percentBp: 0, agentCommissionBp: 0, minAmountForFee: 0n };
 // §6.3. Send Money: ৳5 above ৳100. Cash Out: 1.85%, of which 0.40% is the agent's commission.
 const FEE_RULES: Prisma.FeeRuleCreateInput[] = [
@@ -119,6 +150,7 @@ type DemoKey = (typeof DEMO_USERS)[number]['key'];
 
 /** The 5 demo accounts (ACTIVE, PIN 48213) and their starting money. Run seedSystem() first. */
 export async function seedDemo(): Promise<{ users: Record<DemoKey, User> }> {
+  assertDemoSeedAllowed();
   const pinHash = await hashPin(DEMO_PIN);
   const users = {} as Record<DemoKey, User>;
   for (const { key, ...u } of DEMO_USERS) {
@@ -133,6 +165,11 @@ export async function seedDemo(): Promise<{ users: Record<DemoKey, User> }> {
       },
       update: {},
     });
+    // update: {} keeps an existing user as it is, so it must already have the demo role: else
+    // the demo money would go to (and come from) the wrong kind of wallet.
+    if (user.role !== u.role) {
+      throw new Error(`Phone ${u.phone} already belongs to a ${user.role}, not the demo ${u.role}`);
+    }
     if (user.role !== 'ADMIN') {
       await prisma.wallet.upsert({
         where: { userId: user.id },
@@ -180,6 +217,7 @@ export async function seedDemo(): Promise<{ users: Record<DemoKey, User> }> {
 
 /** seedSystem + seedDemo, then proves the ledger balances. */
 export async function seedAll() {
+  assertDemoSeedAllowed(); // before seedSystem, so a refused run writes nothing at all
   const system = await seedSystem();
   const demo = await seedDemo();
   const report = await reconcileLedger();

@@ -303,7 +303,7 @@ The API sends amounts as **strings** (e.g. `"150050"` = ৳1,500.50), because Ja
 | `users` | id (uuid), phone (unique), **nid_number (unique, 10 digits)**, name, date_of_birth, shop_name (merchants), pin_hash, role, status, failed_pin_attempts, locked_until, profile_photo_key, created_at, updated_at | One row per person (and admin) |
 | `user_documents` | id, user_id, kind (`NID_FRONT/NID_BACK/SELFIE/PROFILE`), storage_key (Cloudinary public_id), access (`PRIVATE/PUBLIC`), mime, size_bytes, width, height, created_at | Metadata for uploaded images |
 | `wallets` | id, user_id (unique; NULL for system wallets), type (`CUSTOMER/AGENT/MERCHANT/SYSTEM_FEES/SYSTEM_FLOAT`), balance (BIGINT, cached), created_at. No `version` column: concurrency is handled by row locks (§8.4), not optimistic versioning | Holds each account's balance |
-| `transactions` | id, trx_id (unique, human-readable), type, status (`COMPLETED/FAILED/REVERSED`), amount, fee, from_wallet_id, to_wallet_id, initiated_by (→ users: who pressed confirm, e.g. the agent for a Cash In, the admin for a Float Top-up), idempotency_key, note, created_at | One row per business event |
+| `transactions` | id, trx_id (unique, human-readable), type, status (`COMPLETED/REVERSED`), amount, fee, from_wallet_id, to_wallet_id, initiated_by (→ users: who pressed confirm, e.g. the agent for a Cash In, the admin for a Float Top-up), idempotency_key, note, created_at | One row per business event |
 | `ledger_entries` | id, seq (BIGINT, auto-increment, unique), transaction_id, wallet_id, amount (signed BIGINT: − debit / + credit; never 0), balance_after, created_at. `seq` is the true order of a wallet's entries: it's assigned at insert under the wallet lock, while `created_at` is the DB transaction's start time, so a transfer that waited for a lock can carry an earlier timestamp | The source of truth; each transaction's entries sum to **0** |
 | `fee_rules` | type, flat_fee, percent_bp (basis points), agent_commission_bp, min_amount_for_fee | Configurable fees |
 | `limit_rules` | type, min_amount, max_per_txn, max_count_day, max_count_month, max_amount_day, max_amount_month (NULL = no limit) | Configurable limits |
@@ -353,7 +353,7 @@ postings (e.g. the rows in §8.3).
 
 **In `postTransaction`:**
 
-3. **Validate the postings before touching the DB:** at least 2; one per wallet; `from` ≠ `to`; both `from` and `to` have a posting; no posting is 0; they **sum to 0**; amount > 0; fee ≥ 0; idempotency key 1–100 characters; note ≤ 50. A violation is a bug in the calling code, so it is a plain error (500), not a user-facing code.
+3. **Validate the postings before touching the DB:** at least 2; one per wallet; `from` ≠ `to`; both `from` and `to` have a posting; `from` is debited (its posting is negative) and `to` is credited (positive), so the money moves the way the transaction row says; no posting is 0; they **sum to 0**; amount > 0; fee ≥ 0; idempotency key 1–100 characters; note ≤ 50. A violation is a bug in the calling code, so it is a plain error (500), not a user-facing code.
 4. Open **one PostgreSQL transaction** (READ COMMITTED; the row locks make SERIALIZABLE unnecessary). If any later step fails, nothing is saved.
 5. **Lock every posting wallet in one query:**
    ```sql
@@ -364,23 +364,24 @@ postings (e.g. the rows in §8.3).
    - `FOR NO KEY UPDATE`, not `FOR UPDATE`: it's the lock a plain `UPDATE` takes, so money operations on the same wallet still run one at a time, but it doesn't block other sessions' foreign-key checks (`FOR KEY SHARE`) on that wallet, e.g. another transaction inserting a row that references it.
    - Prisma's query API has no row locks, so this uses `tx.$queryRaw` inside `prisma.$transaction`. A wallet that isn't found → `404 WALLET_NOT_FOUND`.
 6. **Idempotency, checked after the lock:** if a transaction with this `(from_wallet, idempotency_key)` exists with the same type, amount and receiver, return it (a replay). With any difference → `409 IDEMPOTENCY_KEY_REUSED`. Checking under the lock means a parallel duplicate waits on the "from" wallet, then sees the committed row: 5 identical requests at once give 1 transaction and 4 replays. The client generates one UUID per confirm screen, so a double tap or a network retry is safe. The unique index on `(from_wallet_id, idempotency_key)` is the backstop.
-7. **The guard hook:** the flow's `guard` callback runs here, under the locks and before anything is written, with the locked balances. Phase 5 puts its checks here: both users `ACTIVE` and roles matching the flow; `limit_rules` (sum of today's and this month's completed transactions, Asia/Dhaka time); the ৳5,00,000 customer balance cap. Throwing aborts everything.
+7. **The guard hook:** the flow's `guard` callback runs here, under the locks and before anything is written, with the locked balances (a read-only copy: the rows are frozen, so a guard can't change what the balance check sees). Phase 5 puts its checks here: both users `ACTIVE` and roles matching the flow; `limit_rules` (sum of today's and this month's completed transactions, Asia/Dhaka time); the ৳5,00,000 customer balance cap. Throwing aborts everything.
 8. **Balance check:** each wallet's balance plus its posting must stay ≥ 0, except `SYSTEM_FLOAT` → otherwise `422 INSUFFICIENT_BALANCE`.
 9. Insert the `transactions` row and its `ledger_entries` (each with `balance_after`), and set each wallet's cached `balance` to the computed value.
 10. **Commit.** The deferred zero-sum trigger (§8.5) checks the entries here. If the random `trx_id` already exists, the whole transaction is retried with a new one (up to 3 attempts).
 
 **In the flow, after commit** (Phase 5): write an audit log entry and return the receipt.
 
-**Reconciliation** (`reconcileLedger()`, run by `npm run ledger:check`; an admin button in Phase 7). Four SQL aggregates, all in **one `REPEATABLE READ` transaction**, so they read the same snapshot and the report is consistent even while money is moving:
+**Reconciliation** (`reconcileLedger()`, run by `npm run ledger:check`; an admin button in Phase 7). Five SQL checks, all in **one `REPEATABLE READ` transaction**, so they read the same snapshot and the report is consistent even while money is moving:
 1. Every wallet's cached `balance` equals the sum of its entries (a wallet with no entries must be 0).
 2. Every wallet's latest entry (highest `seq`) has `balance_after` equal to its `balance`.
 3. Every transaction's entries sum to 0, and there are at least 2 of them (this also catches a transaction with no entries).
 4. The sum of all entries is 0, and so is the sum of all cached balances (the float's negative balance is the e-money it issued).
+5. Every entry's `balance_after` equals the previous entry's `balance_after` (by `seq`; 0 before a wallet's first entry) plus its own amount. Checks 1 and 2 only see the end of the chain: a cached balance that was edited and later edited back leaves wrong running balances in the middle, which only this check finds. One bad entry is reported twice: itself, and the entry after it.
 
-The report is `ok` only when all four pass. Every mismatch is listed, and the script exits with code 1.
+The report is `ok` only when all five pass. Every mismatch is listed, and the script exits with code 1.
 
 ### 8.5 Database guards
-Application code is the first line of defence; these are the last. They are raw SQL in two
+Application code is the first line of defence; these are the last. There are 9, as raw SQL in three
 migrations (Prisma can't express them, and leaves them alone in later migrations). A violated
 check or trigger reaches the app as Prisma error `P2039`.
 
@@ -396,6 +397,10 @@ In `…_ledger_core` (7 guards):
 In `…_ledger_entry_amount_nonzero`:
 
 8. `ledger_entries_amount_nonzero` (CHECK `amount <> 0`): a zero entry moves nothing, and a transaction made of a single 0 entry would pass the zero-sum trigger.
+
+In `…_transactions_status_only`:
+
+9. `transactions_status_only` (trigger, `BEFORE UPDATE`): on a posted transaction only `status` may change (e.g. to `REVERSED` later). The idempotency replay trusts the stored type, amount and receiver, and receipts and limit sums trust the rest, so any other edit would silently rewrite history. (A transaction with ledger entries also can't be deleted: the entries' foreign key is `RESTRICT`.)
 
 (The migration's own comments number these differently: they count both transaction checks as one item, and their item 7 is a one-off backfill of wallets for existing users, not a guard.)
 

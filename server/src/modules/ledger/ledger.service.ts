@@ -32,6 +32,11 @@ function validate(input: PostTransactionInput): void {
   if (!ids.has(input.fromWalletId) || !ids.has(input.toWalletId)) {
     fail('the from and to wallets must both have a posting');
   }
+  // Present: checked just above. A swapped sign would move the money the opposite way to the
+  // transaction row (and its receipt, limits and idempotency key).
+  const amountOf = (id: string) => postings.find((p) => p.walletId === id)!.amount;
+  if (amountOf(input.fromWalletId) >= 0n) fail('the from wallet must be debited');
+  if (amountOf(input.toWalletId) <= 0n) fail('the to wallet must be credited');
   if (postings.some((p) => p.amount === 0n)) fail('posting amounts must not be 0');
   if (postings.reduce((sum, p) => sum + p.amount, 0n) !== 0n) fail('postings must sum to 0');
   if (input.amount <= 0n) fail('amount must be > 0');
@@ -74,14 +79,18 @@ async function post(
 ): Promise<PostTransactionResult> {
   const ids = input.postings.map((p) => p.walletId);
 
-  // ORDER BY id: every transaction locks wallets in the same global order, so two transfers
-  // between the same wallets in opposite directions can't deadlock. See ledger.concurrency.test.ts.
+  // ORDER BY id GUARANTEES one global lock order, so two transfers between the same wallets in
+  // opposite directions can't deadlock. Without it, the rows would be locked in this statement's
+  // scan order: usually the same for every transaction, but Postgres doesn't promise that.
+  // The control test in ledger.concurrency.test.ts shows the deadlock (40P01) that locking the
+  // wallets one at a time ("from", then "to") causes.
   // FOR NO KEY UPDATE (the lock a plain UPDATE takes) serializes money ops on a wallet without
   // blocking other sessions' FK checks (FOR KEY SHARE) on it, as FOR UPDATE would.
   const rows = await tx.$queryRaw<LockedWallet[]>`
     SELECT id, type::text AS type, balance FROM wallets
     WHERE id = ANY(${ids}::uuid[]) ORDER BY id FOR NO KEY UPDATE`;
-  const wallets = new Map(rows.map((w) => [w.id, w]));
+  // Frozen: the balance check below must use the locked balances, whatever the guard does.
+  const wallets = new Map(rows.map((w) => [w.id, Object.freeze(w)]));
   if (ids.some((id) => !wallets.has(id))) throw walletNotFound();
 
   // Only now, under the locks: a parallel request with the same key waited on the "from" lock
@@ -89,7 +98,7 @@ async function post(
   const existing = await findByKey(tx, input);
   if (existing) return replay(existing, input);
 
-  await input.guard?.({ tx, wallets });
+  await input.guard?.({ tx, wallets: new Map(wallets) });
 
   const entries = input.postings.map((p) => {
     const wallet = wallets.get(p.walletId)!; // present: checked right after the lock

@@ -118,7 +118,9 @@ by ৳1,00,000, and the agent cashes in ৳10,000 to Rahim and ৳5,000 to Karim
 ### Seed and reset
 - `npm run db:seed` is safe to run again: it only creates what's missing, and the demo money uses
   fixed idempotency keys, so a second run replays it instead of paying twice. It refuses to run
-  with `NODE_ENV=production`.
+  with `NODE_ENV=production`, and against any database host except `localhost`, `127.0.0.1` or
+  `[::1]` (the demo PIN is public). To seed another host on purpose, list it in
+  `DEMO_SEED_ALLOWED_HOSTS` (see `server/.env.example`).
 - To start over with an empty database: `npm run db:reset` (it asks for confirmation and
   **deletes all data**), then `npm run db:seed`, because Prisma 7's reset no longer seeds on its
   own. **Run the reset yourself**: Prisma refuses `migrate reset` when an AI agent runs it.

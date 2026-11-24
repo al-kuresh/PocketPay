@@ -1,4 +1,4 @@
-// The database's own guards on the money tables (raw SQL in migrations/*_ledger_core).
+// The database's own guards on the money tables (raw SQL in the migrations; design.md §8.5).
 // These tests write with Prisma directly, skipping any service, to prove the DATABASE refuses
 // bad data even when application code has a bug.
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
@@ -15,7 +15,7 @@ const checkViolation = {
   code: 'P2039',
   meta: { driverAdapterError: { cause: { originalCode: '23514' } } },
 };
-const appendOnlyViolation = {
+const triggerViolation = {
   code: 'P2039',
   meta: { driverAdapterError: { cause: { originalCode: 'P0001' } } },
 };
@@ -167,8 +167,8 @@ describe('ledger database guards', () => {
       const updateErr = await caught(prisma.ledgerEntry.updateMany({ data: { amount: 0n } }));
       const deleteErr = await caught(prisma.ledgerEntry.deleteMany());
 
-      expect(updateErr).toMatchObject(appendOnlyViolation);
-      expect(deleteErr).toMatchObject(appendOnlyViolation);
+      expect(updateErr).toMatchObject(triggerViolation);
+      expect(deleteErr).toMatchObject(triggerViolation);
       const amounts = (await prisma.ledgerEntry.findMany({ orderBy: { seq: 'asc' } })).map(
         (e) => e.amount,
       );
@@ -183,6 +183,36 @@ describe('ledger database guards', () => {
     it('refuses a transaction with a negative fee', async () => {
       const err = await caught(prisma.transaction.create({ data: topup(f, { fee: -1n }) }));
       expect(err).toMatchObject(checkViolation);
+    });
+
+    it('refuses to change anything on a transaction except its status', async () => {
+      const t = await post(f, [
+        { walletId: f.float.id, amount: -100n },
+        { walletId: f.customer.id, amount: 100n },
+      ]);
+
+      const err = await caught(
+        prisma.transaction.update({ where: { id: t.id }, data: { amount: 200n } }),
+      );
+
+      expect(err).toMatchObject(triggerViolation);
+      expect((await prisma.transaction.findUniqueOrThrow({ where: { id: t.id } })).amount).toBe(
+        100n,
+      );
+    });
+
+    it('allows changing only the status of a transaction', async () => {
+      const t = await post(f, [
+        { walletId: f.float.id, amount: -100n },
+        { walletId: f.customer.id, amount: 100n },
+      ]);
+
+      const updated = await prisma.transaction.update({
+        where: { id: t.id },
+        data: { status: 'REVERSED' },
+      });
+
+      expect(updated).toEqual({ ...t, status: 'REVERSED' });
     });
   });
 });

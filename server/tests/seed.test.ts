@@ -3,9 +3,9 @@
 // imported from the seed, so a wrong number in the seed fails here.
 import { spawnSync } from 'node:child_process';
 import request from 'supertest';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app';
-import { seedAll } from '../src/db/seed';
+import { assertDemoSeedAllowed, seedAll, seedDemo } from '../src/db/seed';
 import { prisma } from '../src/lib/prisma';
 import { MemoryStorage } from '../src/lib/storage/memory';
 import { reconcileLedger } from '../src/modules/ledger/reconcile';
@@ -146,6 +146,79 @@ describe('seedAll', () => {
     const me = await request(app).get('/api/v1/me').set('Authorization', `Bearer ${accessToken}`);
     expect(me.body.data.user.role).toBe('ADMIN');
     expect(me.body.data.wallet).toBeNull();
+  });
+
+  it('refuses a remote database before writing anything', async () => {
+    // The Prisma client was built from the test URL already; only the check reads the stub.
+    vi.stubEnv('DATABASE_URL', 'postgresql://pocketpay:s3cret-pw@db.example.com:5432/pocketpay');
+    try {
+      await expect(seedAll()).rejects.toThrow(/db\.example\.com/);
+      await expect(seedDemo()).rejects.toThrow(/db\.example\.com/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+
+    expect(await prisma.wallet.count()).toBe(0);
+    expect(await prisma.user.count()).toBe(0);
+  });
+
+  it('refuses a demo phone that already belongs to another role, before any money moves', async () => {
+    await prisma.user.create({
+      data: {
+        phone: '01800000004',
+        nidNumber: '1234567890',
+        name: 'Not The Agent',
+        dateOfBirth: new Date('1995-06-15'),
+        pinHash: 'not-a-real-hash',
+        role: 'CUSTOMER',
+      },
+    });
+
+    await expect(seedAll()).rejects.toThrow(
+      'Phone 01800000004 already belongs to a CUSTOMER, not the demo AGENT',
+    );
+    expect(await prisma.transaction.count()).toBe(0);
+  });
+});
+
+describe('assertDemoSeedAllowed', () => {
+  const url = (host: string) => `postgresql://pocketpay:s3cret-pw@${host}:5432/pocketpay`;
+  const errorOf = (env: NodeJS.ProcessEnv) => {
+    try {
+      assertDemoSeedAllowed(env);
+    } catch (err) {
+      return err as Error;
+    }
+    return undefined;
+  };
+
+  it.each(['localhost', '127.0.0.1', '[::1]'])('allows the local host %s', (host) => {
+    expect(errorOf({ DATABASE_URL: url(host) })).toBeUndefined();
+  });
+
+  it('refuses production, even on a local host', () => {
+    expect(errorOf({ NODE_ENV: 'production', DATABASE_URL: url('localhost') })?.message).toBe(
+      'Demo seeding is disabled in production; Phase 10 decides how the live demo is seeded',
+    );
+  });
+
+  it.each([
+    ['a remote host', url('db.example.com'), /db\.example\.com/],
+    ['a DATABASE_URL that is not a URL', 'not a url s3cret-pw', /no host/],
+  ])('refuses %s without leaking the password', (_, databaseUrl, message) => {
+    const err = errorOf({ DATABASE_URL: databaseUrl });
+    expect(err?.message).toMatch(message);
+    expect(err?.message).not.toContain('s3cret-pw');
+  });
+
+  it('allows a remote host listed in DEMO_SEED_ALLOWED_HOSTS (exact match only)', () => {
+    const allowed = 'other.example.com, demo-db.example.com';
+    expect(
+      errorOf({ DATABASE_URL: url('demo-db.example.com'), DEMO_SEED_ALLOWED_HOSTS: allowed }),
+    ).toBeUndefined();
+    expect(
+      errorOf({ DATABASE_URL: url('db.example.com'), DEMO_SEED_ALLOWED_HOSTS: 'example.com' }),
+    ).toBeInstanceOf(Error);
   });
 });
 

@@ -35,10 +35,11 @@ export interface PostTransactionInput {
   /** ≤ 50 chars. */
   note?: string;
   /** Runs inside the transaction after the locks are taken and before anything is written.
-   *  Phase 5 puts status, limit and balance-cap checks here. Throwing aborts everything. */
+   *  Phase 5 puts status, limit and balance-cap checks here. Throwing aborts everything.
+   *  `wallets` is a copy of the locked rows, and the rows are frozen: read-only. */
   guard?: (ctx: {
     tx: Prisma.TransactionClient;
-    wallets: Map<string, LockedWallet>;
+    wallets: ReadonlyMap<string, Readonly<LockedWallet>>;
   }) => Promise<void>;
 }
 

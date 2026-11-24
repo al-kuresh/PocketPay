@@ -190,8 +190,8 @@ model AuditLog {
 }
 
 // Money tables (docs/design.md §8). Money is BigInt poisha (৳1 = 100).
-// Their check constraints and triggers are raw SQL in migrations/*_ledger_core: Prisma can't
-// express them, and leaves them alone in later migrations.
+// Their check constraints and triggers are raw SQL in the migrations (all 9 are listed in
+// docs/design.md §8.5): Prisma can't express them, and leaves them alone in later migrations.
 
 model Wallet {
   id        String     @id @default(uuid()) @db.Uuid

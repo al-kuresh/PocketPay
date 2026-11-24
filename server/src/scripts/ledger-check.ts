@@ -31,6 +31,12 @@ try {
         `its latest entry says ${formatTaka(m.lastBalanceAfter)}`,
     );
   }
+  for (const b of r.chainBreaks) {
+    console.log(
+      `  ✗ wallet ${b.walletId}: entry #${b.seq} says balance ${formatTaka(b.balanceAfter)}, ` +
+        `expected ${formatTaka(b.expected)} from the entry before it`,
+    );
+  }
   for (const t of r.unbalancedTransactions) {
     console.log(
       `  ✗ transaction ${t.trxId} (${t.transactionId}): ${t.entryCount} entries ` +

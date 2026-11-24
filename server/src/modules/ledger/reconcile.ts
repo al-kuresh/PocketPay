@@ -8,6 +8,8 @@ export interface ReconcileReport {
   checkedTransactions: number;
   walletMismatches: { walletId: string; type: WalletType; cached: string; ledger: string }[];
   lastBalanceMismatches: { walletId: string; cached: string; lastBalanceAfter: string }[];
+  /** Entries whose balance_after isn't the previous entry's balance_after plus their amount. */
+  chainBreaks: { walletId: string; seq: string; balanceAfter: string; expected: string }[];
   unbalancedTransactions: {
     transactionId: string;
     trxId: string;
@@ -21,7 +23,7 @@ export interface ReconcileReport {
 }
 
 /**
- * Four SQL aggregates over the whole ledger, read-only. REPEATABLE READ: all four read the same
+ * Five SQL checks over the whole ledger, read-only. REPEATABLE READ: all five read the same
  * snapshot, so the report is consistent even while money is moving.
  */
 export async function reconcileLedger(db: PrismaClient = prisma): Promise<ReconcileReport> {
@@ -74,20 +76,37 @@ export async function reconcileLedger(db: PrismaClient = prisma): Promise<Reconc
            (SELECT COALESCE(SUM(balance), 0) FROM wallets)::text AS "cachedTotal"`;
       if (!totals) throw new Error('reconcileLedger: totals query returned no row');
 
+      // 5. Every entry's balance_after = the previous entry's (by seq; 0 before the first) + its
+      // amount. Checks 1 and 2 only see the end of the chain: a cached balance edited and later
+      // edited back leaves wrong running balances in the middle that both of them miss.
+      // One bad entry shows up twice: itself, and the next entry, which builds on its value.
+      const chainBreaks = await tx.$queryRaw<ReconcileReport['chainBreaks']>`
+    SELECT wallet_id AS "walletId", seq::text AS seq,
+           balance_after::text AS "balanceAfter", (prev + amount)::text AS expected
+    FROM (
+      SELECT wallet_id, seq, amount, balance_after,
+             LAG(balance_after, 1, 0::bigint) OVER (PARTITION BY wallet_id ORDER BY seq) AS prev
+      FROM ledger_entries
+    ) c
+    WHERE balance_after <> prev + amount
+    ORDER BY wallet_id, seq`;
+
       return {
         ok:
           walletMismatches.length === 0 &&
           lastBalanceMismatches.length === 0 &&
+          chainBreaks.length === 0 &&
           unbalancedTransactions.length === 0 &&
           totals.ledgerTotal === '0' &&
           totals.cachedTotal === '0',
         ...totals,
         walletMismatches,
         lastBalanceMismatches,
+        chainBreaks,
         unbalancedTransactions,
       };
     },
-    // Full-table aggregates; this is an offline check, so a longer timeout is fine.
+    // Full-table scans; this is an offline check, so a longer timeout is fine.
     { isolationLevel: 'RepeatableRead', timeout: 60_000 },
   );
 }
