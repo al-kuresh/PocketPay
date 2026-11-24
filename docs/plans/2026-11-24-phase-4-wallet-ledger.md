@@ -131,6 +131,15 @@ SELECT gen_random_uuid(), u."id", u."role"::text::"WalletType" FROM "users" u
 WHERE u."role" <> 'ADMIN' AND NOT EXISTS (SELECT 1 FROM "wallets" w WHERE w."user_id" = u."id");
 ```
 
+**Guard 8**, added after Task 4 in its own migration `…_ledger_entry_amount_nonzero` (never edit `…_ledger_core`):
+```sql
+-- 8. A ledger entry always moves money; a zero entry is meaningless and
+--    would let a single-entry transaction pass the zero-sum trigger.
+ALTER TABLE "ledger_entries" ADD CONSTRAINT "ledger_entries_amount_nonzero"
+  CHECK ("amount" <> 0);
+```
+Test in `tests/ledger.guards.test.ts`: a 0n entry inside an otherwise balanced transaction → `P2039`, originalCode `23514`.
+
 - [ ] **Step 1: Edit the schema** and run `npm run db:migrate -- --create-only --name ledger_core`. Append the SQL above to the new `migration.sql`. Run `npm run db:migrate`, then `npm run db:generate`.
 - [ ] **Step 2: Write `tests/ledger.guards.test.ts`** (`beforeEach(resetDb)`). It writes directly with Prisma, deliberately skipping the service, to prove the **database** refuses bad data:
   - a second `SYSTEM_FEES` wallet → `P2002`, index `wallets_system_type_key`
@@ -393,7 +402,7 @@ The checks are SQL aggregates through `$queryRaw`, not loops in JavaScript:
 - [ ] **Step 1: Write `docs/diagrams/erd.md`:** a Mermaid `erDiagram` of **all** tables (auth plus money), with keys and relationships, generated from `schema.prisma`. GitHub renders Mermaid. This completes the ER diagram left over from Phase 1.
 - [ ] **Step 2: Update `docs/design.md`:**
   - §8.2: drop `version` from `wallets`, add `initiated_by` to `transactions`, add `seq` to `ledger_entries` (with the one-line reason)
-  - new §8.5 "Database guards", listing the 7 SQL guards, each with one line on why it exists
+  - new §8.5 "Database guards", listing the 8 SQL guards (7 in `…_ledger_core`, guard 8 in `…_ledger_entry_amount_nonzero`), each with one line on why it exists
   - §8.4: the steps now match `postTransaction` (lock order, idempotency after the lock, the guard hook)
   - §15: add "Row locks + DB guards instead of optimistic versioning"
 - [ ] **Step 3: Update `docs/api.md`:** `GET /me` now returns `wallet` (with an example: `"balance": "1000000"` and a note that it's poisha, so ৳10,000.00); add the 3 new error codes to the table; move "Wallet" out of "Coming next" only if a wallet endpoint exists (it doesn't yet; lookup is Phase 5).

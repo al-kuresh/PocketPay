@@ -145,6 +145,18 @@ describe('ledger database guards', () => {
       expect(await prisma.ledgerEntry.count()).toBe(2);
     });
 
+    it('refuses a zero-amount ledger entry, even in an otherwise balanced transaction', async () => {
+      const err = await caught(
+        post(f, [
+          { walletId: f.float.id, amount: -100n },
+          { walletId: f.customer.id, amount: 100n },
+          { walletId: f.fees.id, amount: 0n },
+        ]),
+      );
+      expect(err).toMatchObject(checkViolation);
+      expect(await prisma.ledgerEntry.count()).toBe(0);
+    });
+
     it('refuses to update or delete ledger entries', async () => {
       // The trigger is per row, so there must be rows for it to fire on.
       await post(f, [
