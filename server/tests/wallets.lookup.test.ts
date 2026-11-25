@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
+import { env } from '../src/config/env';
 import { prisma } from '../src/lib/prisma';
 import { MemoryStorage } from '../src/lib/storage/memory';
 import { createActor } from './helpers/actors';
@@ -83,6 +84,26 @@ describe('GET /wallets/lookup', () => {
       .get('/api/v1/wallets/lookup')
       .set('Authorization', `Bearer ${agent.token}`);
     expect(missing.status).toBe(400);
+  });
+
+  it('rate-limits per USER, not per IP: the 31st lookup is 429, another user still passes', async () => {
+    // Limiters skip when NODE_ENV is 'test'; switch that off for this test only.
+    const nodeEnv = env.NODE_ENV;
+    env.NODE_ENV = 'development';
+    try {
+      // All requests come from the same IP (supertest, 127.0.0.1).
+      for (let i = 1; i <= 30; i++) {
+        expect((await lookup(rahim.user.phone, agent)).status, `lookup ${i}`).toBe(200);
+      }
+      const blocked = await lookup(rahim.user.phone, agent);
+      expect(blocked.status).toBe(429);
+      expect(blocked.body.error.code).toBe('RATE_LIMITED');
+
+      const other = await lookup(shop.user.phone, rahim);
+      expect(other.status).toBe(200);
+    } finally {
+      env.NODE_ENV = nodeEnv;
+    }
   });
 
   it('no token → 401; a MERCHANT or ADMIN → 403 FORBIDDEN', async () => {
