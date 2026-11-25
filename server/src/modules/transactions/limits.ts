@@ -39,6 +39,10 @@ export async function checkPeriodLimits(
 ): Promise<void> {
   const { limit } = a;
   if (!limit) return;
+  // On the 'to' side (Cash In) the limit is the receiving customer's, and their totals aren't
+  // the caller's business: the caller learns only that it's in the way.
+  const exceeded = (...args: Parameters<typeof limitExceeded>) =>
+    a.side === 'to' ? receiverLimitExceeded() : limitExceeded(...args);
   const periods = [
     {
       period: 'DAY',
@@ -71,10 +75,10 @@ export async function checkPeriodLimits(
     const count = used._count;
     const sum = used._sum.amount ?? 0n;
     if (maxCount !== null && count + 1 > maxCount) {
-      throw limitExceeded(period, 'COUNT', String(maxCount), String(count));
+      throw exceeded(period, 'COUNT', String(maxCount), String(count));
     }
     if (maxAmount !== null && sum + a.amount > maxAmount) {
-      throw limitExceeded(period, 'AMOUNT', poishaToString(maxAmount), poishaToString(sum));
+      throw exceeded(period, 'AMOUNT', poishaToString(maxAmount), poishaToString(sum));
     }
   }
 }
@@ -90,6 +94,14 @@ const limitExceeded = (
     'LIMIT_EXCEEDED',
     `This would go over your ${period === 'DAY' ? 'daily' : 'monthly'} ${kind === 'COUNT' ? 'transaction count' : 'amount'} limit`,
     { period, kind, limit, used },
+  );
+
+/** No details: which period, the limit or the totals would tell the caller about the receiver. */
+const receiverLimitExceeded = () =>
+  new AppError(
+    422,
+    'RECEIVER_LIMIT_EXCEEDED',
+    "This customer can't receive this transaction right now",
   );
 
 /** Only a CUSTOMER wallet is capped (design §6.4). Run it in the `guard`, on the locked balance. */

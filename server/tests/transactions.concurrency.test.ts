@@ -2,11 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { prisma } from '../src/lib/prisma';
 import { reconcileLedger } from '../src/modules/ledger/reconcile';
-import { executeTransfer } from '../src/modules/transactions/transfer.service';
+import { postTransaction } from '../src/modules/ledger/ledger.service';
+import { loadRules } from '../src/modules/transactions/rules';
+import { executeTransfer, makeTransferGuard } from '../src/modules/transactions/transfer.service';
 import { createActor, setLimit, setSetting } from './helpers/actors';
 import { resetDb } from './helpers/db';
 import { seedSystem } from './helpers/seed';
-import { balanceOf, fund } from './helpers/wallets';
+import { balanceOf, fund, transfer } from './helpers/wallets';
 
 type Actor = Awaited<ReturnType<typeof createActor>>;
 
@@ -57,6 +59,39 @@ describe('limits and the cap hold under parallel requests', () => {
       fulfilled: 3,
       codes: Array(7).fill('LIMIT_EXCEEDED'),
     });
+    expect(await balanceOf(receiver.wallet!.id)).toBe(3_000n);
+    expect((await reconcileLedger()).ok).toBe(true);
+  });
+
+  // The guard + postTransaction straight, no PIN step: the result depends only on the wallet
+  // lock, not on how one user's PIN checks space the requests out.
+  it('10 parallel guarded sends (no PIN step) with maxCountDay = 3 → exactly 3 succeed', async () => {
+    await setLimit('SEND_MONEY', { maxCountDay: 3 });
+    const sender = await customer();
+    const receiver = await customer();
+    await fund(sender.wallet!.id, 10_000_000n, sender.user.id);
+    const { limit } = await loadRules(prisma, 'SEND_MONEY');
+    const amount = 1_000n;
+    const guardedSend = () =>
+      postTransaction({
+        ...transfer(sender.wallet!.id, receiver.wallet!.id, amount, sender.user.id),
+        guard: makeTransferGuard({
+          type: 'SEND_MONEY',
+          initiatorId: sender.user.id,
+          receiverId: receiver.user.id,
+          limit,
+          senderWalletId: sender.wallet!.id,
+          debit: amount,
+          customerWalletId: sender.wallet!.id,
+          receiverWalletId: receiver.wallet!.id,
+          amount,
+          credit: amount,
+        }),
+      });
+
+    const results = await Promise.allSettled(Array.from({ length: 10 }, guardedSend));
+
+    expect(outcome(results)).toEqual({ fulfilled: 3, codes: Array(7).fill('LIMIT_EXCEEDED') });
     expect(await balanceOf(receiver.wallet!.id)).toBe(3_000n);
     expect((await reconcileLedger()).ok).toBe(true);
   });

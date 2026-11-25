@@ -345,8 +345,8 @@ the phone or the amount never costs a PIN attempt:
 5. the PIN → `403 INVALID_PIN`, `423 ACCOUNT_LOCKED` (the same 3-strike lockout as login)
 6. under the wallet locks, in this order → `422 INSUFFICIENT_BALANCE` (the sender's own balance,
    first: a sender who can't pay learns nothing about the receiver), `403 ACCOUNT_NOT_ACTIVE` /
-   `422 RECEIVER_NOT_ACTIVE` (a freeze since step 2), `422 LIMIT_EXCEEDED`,
-   `422 RECEIVER_BALANCE_LIMIT`
+   `422 RECEIVER_NOT_ACTIVE` (a freeze since step 2), `422 LIMIT_EXCEEDED` (the caller's own
+   limit) or `422 RECEIVER_LIMIT_EXCEEDED` (a Cash In customer's limit), `422 RECEIVER_BALANCE_LIMIT`
 
 A replay runs steps 1–5 again, then returns the original transaction (step 6 is skipped). So a
 replay after the receiver was frozen gets `422 RECEIVER_NOT_ACTIVE` rather than the receipt.
@@ -385,8 +385,10 @@ nothing is written.
 the fee). A preview is informative only: a parallel request can still change the outcome, and
 only the money POST's own checks are binding.
 
-Errors: the same as the money POSTs, except the PIN, `Idempotency-Key` and replay ones and
-`RECEIVER_BALANCE_LIMIT` (so a preview can pass and the POST still be refused by the cap). A
+Errors: the same as the money POSTs, except the PIN, `Idempotency-Key` and replay ones,
+`RECEIVER_BALANCE_LIMIT` and `RECEIVER_LIMIT_EXCEEDED`. A preview only checks things about the
+caller: an answer about the receiver (their balance under the cap, a Cash In customer's limits)
+would let anyone probe it. So a preview can pass and the POST still be refused by those two. A
 `type` the caller's role can't start (an agent previewing `SEND_MONEY`) → `403 FORBIDDEN`.
 
 ### `GET /wallets/lookup?phone=`
@@ -531,7 +533,8 @@ also appear here mean the same: `ACCOUNT_LOCKED` (423, shared lockout with login
 | `RECEIVER_NOT_ACTIVE` | 422 | | no: the receiver can't take money right now |
 | `AMOUNT_BELOW_MINIMUM` | 422 | `{ min }` (poisha) | with a larger amount. Also: a payment whose merchant fee would be ≥ the amount |
 | `AMOUNT_ABOVE_MAXIMUM` | 422 | `{ max }` (poisha) | with a smaller amount |
-| `LIMIT_EXCEEDED` | 422 | `{ period: "DAY"\|"MONTH", kind: "COUNT"\|"AMOUNT", limit, used }`, all strings (poisha for `AMOUNT`) | tomorrow / next month (Asia/Dhaka), or a smaller amount |
+| `LIMIT_EXCEEDED` | 422 | the caller's own limit: `{ period: "DAY"\|"MONTH", kind: "COUNT"\|"AMOUNT", limit, used }`, all strings (poisha for `AMOUNT`) | tomorrow / next month (Asia/Dhaka), or a smaller amount |
+| `RECEIVER_LIMIT_EXCEEDED` | 422 | none: the customer's totals aren't the caller's business | no: the receiving customer's own Cash In limit (day or month) is used up |
 | `RECEIVER_BALANCE_LIMIT` | 422 | | no: the receiving customer would go over ৳5,00,000 |
 | `INSUFFICIENT_BALANCE` | 422 | | no: the wallet doesn't have enough money (amount + fee) |
 | `IDEMPOTENCY_KEY_REUSED` | 409 | | no: the key was already used for a different transaction (type, amount or receiver). Use a new key for a new transaction |

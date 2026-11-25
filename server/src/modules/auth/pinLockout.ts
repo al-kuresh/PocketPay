@@ -1,5 +1,6 @@
 import type { User } from '../../generated/prisma/client';
 import { writeAudit } from '../../lib/audit';
+import { withKeyLock } from '../../lib/keyedMutex';
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../utils/AppError';
 import { verifyPin } from './pin';
@@ -37,48 +38,51 @@ export async function verifyPinWithLockout(
     failedAction: 'LOGIN_FAILED' | 'TRANSACTION_PIN_FAILED';
   },
 ): Promise<void> {
-  const outcome = await prisma.$transaction(
-    async (tx): Promise<Outcome> => {
-      // A row lock, not an attempt claim: PIN checks for one user run one at a time against the
-      // fresh counter. Parallel guesses still compare at most 3 PINs, parallel right PINs all
-      // pass (none is refused for an attempt another request holds), and a crash rolls the
-      // whole check back, so there is no half-done state to clean up.
-      const [row] = await tx.$queryRaw<
-        { failed_pin_attempts: number; locked_until: Date | null }[]
-      >`SELECT failed_pin_attempts, locked_until FROM users
+  // One user's checks wait their turn in memory, not in Postgres: a waiting request holds no
+  // pool connection, so one user's parallel requests can't starve everyone else's queries.
+  const outcome = await withKeyLock(user.id, () =>
+    prisma.$transaction(
+      async (tx): Promise<Outcome> => {
+        // A row lock, not an attempt claim: PIN checks for one user run one at a time against the
+        // fresh counter. Parallel guesses still compare at most 3 PINs, parallel right PINs all
+        // pass (none is refused for an attempt another request holds), and a crash rolls the
+        // whole check back, so there is no half-done state to clean up.
+        const [row] = await tx.$queryRaw<
+          { failed_pin_attempts: number; locked_until: Date | null }[]
+        >`SELECT failed_pin_attempts, locked_until FROM users
         WHERE id = ${user.id}::uuid FOR NO KEY UPDATE`;
-      if (!row) throw new Error(`verifyPinWithLockout: no user ${user.id}`);
+        if (!row) throw new Error(`verifyPinWithLockout: no user ${user.id}`);
 
-      // Locked means locked, even for the right PIN.
-      if (row.locked_until && row.locked_until > new Date()) {
-        return { kind: 'locked', lockedUntil: row.locked_until };
-      }
+        // Locked means locked, even for the right PIN.
+        if (row.locked_until && row.locked_until > new Date()) {
+          return { kind: 'locked', lockedUntil: row.locked_until };
+        }
 
-      if (await verifyPin(pin, user.pinHash)) {
-        // Clear any earlier failures and any expired lock.
-        await tx.user.update({
-          where: { id: user.id },
-          data: { failedPinAttempts: 0, lockedUntil: null },
-        });
-        return { kind: 'ok' };
-      }
+        if (await verifyPin(pin, user.pinHash)) {
+          // Clear any earlier failures and any expired lock.
+          await tx.user.update({
+            where: { id: user.id },
+            data: { failedPinAttempts: 0, lockedUntil: null },
+          });
+          return { kind: 'ok' };
+        }
 
-      const failed = row.failed_pin_attempts + 1;
-      if (failed >= MAX_PIN_ATTEMPTS) {
-        const lockedUntil = new Date(Date.now() + LOCK_MS);
-        // Counter back to 0: once the lock expires the user gets a fresh 3 attempts.
-        await tx.user.update({
-          where: { id: user.id },
-          data: { lockedUntil, failedPinAttempts: 0 },
-        });
-        return { kind: 'lockedNow', lockedUntil };
-      }
-      await tx.user.update({ where: { id: user.id }, data: { failedPinAttempts: failed } });
-      return { kind: 'wrong', attemptsLeft: MAX_PIN_ATTEMPTS - failed };
-    },
-    // maxWait as LEDGER_TX_OPTIONS: parallel requests for one user each hold a pool connection
-    // while they queue on the row lock, so getting a connection can take a while.
-    { maxWait: 5_000, timeout: 10_000 },
+        const failed = row.failed_pin_attempts + 1;
+        if (failed >= MAX_PIN_ATTEMPTS) {
+          const lockedUntil = new Date(Date.now() + LOCK_MS);
+          // Counter back to 0: once the lock expires the user gets a fresh 3 attempts.
+          await tx.user.update({
+            where: { id: user.id },
+            data: { lockedUntil, failedPinAttempts: 0 },
+          });
+          return { kind: 'lockedNow', lockedUntil };
+        }
+        await tx.user.update({ where: { id: user.id }, data: { failedPinAttempts: failed } });
+        return { kind: 'wrong', attemptsLeft: MAX_PIN_ATTEMPTS - failed };
+      },
+      // As LEDGER_TX_OPTIONS. The row lock still waits across API instances (the queue is per process).
+      { maxWait: 5_000, timeout: 10_000 },
+    ),
   );
 
   // Audit and throw only after the commit: throwing inside would roll back the counter.

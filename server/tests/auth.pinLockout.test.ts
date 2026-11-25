@@ -142,6 +142,36 @@ describe('verifyPinWithLockout', () => {
     expect(await prisma.auditLog.count()).toBe(0);
   });
 
+  it("queues one user's PIN checks in memory: never more than 1 open DB transaction for them", async () => {
+    const user = await row();
+    // Test files run one at a time (vitest.config.ts), so any session waiting on a lock is ours.
+    // Without the queue, 4 of the 5 checks would sit in Postgres on the row lock, each holding
+    // a pool connection; with it, they wait in memory and no session ever waits on a lock.
+    const lockWaits = async () =>
+      Number(
+        (
+          await prisma.$queryRaw<{ n: bigint }[]>`
+            SELECT count(*) AS n FROM pg_stat_activity
+            WHERE datname = current_database() AND wait_event_type = 'Lock'`
+        )[0]!.n,
+      );
+    let done = false;
+    let maxWaiting = 0;
+    const checks = Promise.all(
+      Array.from({ length: 5 }, () => verifyPinWithLockout(user, PIN, opts)),
+    ).finally(() => {
+      done = true;
+    });
+    while (!done) {
+      maxWaiting = Math.max(maxWaiting, await lockWaits());
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    await checks;
+
+    expect(maxWaiting).toBe(0);
+    expect(await row()).toMatchObject({ failedPinAttempts: 0, lockedUntil: null });
+  });
+
   it('shares the counter with login: 2 wrong money PINs, then a wrong login locks', async () => {
     await expect(attempt(WRONG_PIN)).rejects.toMatchObject({ code: 'INVALID_PIN' });
     await expect(attempt(WRONG_PIN)).rejects.toMatchObject({ code: 'INVALID_PIN' });

@@ -65,8 +65,11 @@ export function makeTransferGuard(a: {
   credit: bigint;
   /** Tests only. Default: the app's clock when the guard runs (the clock that stamps created_at). */
   now?: Date;
-  /** Preview only: an unlocked cap answer would let anyone probe the receiver's balance. */
-  skipCap?: boolean;
+  /**
+   * Preview only: run just the checks about the caller. An unlocked answer about the receiver
+   * (their balance under the cap, their own Cash In limits) would let anyone probe it.
+   */
+  callerOnly?: boolean;
 }): Guard {
   return async ({ tx, wallets }) => {
     // Present: every posting wallet is locked (or, in a preview, read). postTransaction's own
@@ -87,17 +90,21 @@ export function makeTransferGuard(a: {
     // fills @default(now()) itself from that clock (not the DB's), so this is the day the row
     // lands in. An earlier `now` could only widen the window (no upper bound), never narrow it.
     const now = a.now ?? new Date();
-    await checkPeriodLimits(tx, {
-      type: a.type,
-      limit: a.limit,
-      customerWalletId: a.customerWalletId,
-      side: FLOWS[a.type].limitSide,
-      amount: a.amount,
-      now,
-    });
+    // 'from' is the initiator's own wallet, 'to' the receiver's.
+    const side = FLOWS[a.type].limitSide;
+    if (!(a.callerOnly && side === 'to')) {
+      await checkPeriodLimits(tx, {
+        type: a.type,
+        limit: a.limit,
+        customerWalletId: a.customerWalletId,
+        side,
+        amount: a.amount,
+        now,
+      });
+    }
 
     const receiver = wallets.get(a.receiverWalletId)!; // present: every posting wallet is locked
-    if (!a.skipCap && receiver.type === 'CUSTOMER') {
+    if (!a.callerOnly && receiver.type === 'CUSTOMER') {
       checkBalanceCap({
         receiverType: receiver.type,
         balance: receiver.balance,
@@ -165,12 +172,13 @@ export async function previewTransfer(req: TransferRequest): Promise<TransferPre
   const p = await prepare(req);
 
   // The guard's checks on plain reads, without locks: a parallel request can still change them.
-  // It starts with the sender's balance. No cap: only the real POST enforces it.
+  // It starts with the sender's balance. Only checks about the caller: no cap and no receiver
+  // (Cash In) limits; the real POST enforces those.
   const wallets = await prisma.wallet.findMany({
     where: { id: { in: p.postings.map((x) => x.walletId) } },
     select: { id: true, type: true, balance: true },
   });
-  const guard = makeTransferGuard({ ...p.guardArgs, skipCap: true });
+  const guard = makeTransferGuard({ ...p.guardArgs, callerOnly: true });
   await guard({ tx: prisma, wallets: new Map(wallets.map((w) => [w.id, w])) });
 
   return {

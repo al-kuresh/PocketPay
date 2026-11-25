@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
+import { env } from '../src/config/env';
 import { prisma } from '../src/lib/prisma';
 import { MemoryStorage } from '../src/lib/storage/memory';
 import { reconcileLedger } from '../src/modules/ledger/reconcile';
@@ -323,5 +324,65 @@ describe('over HTTP, in parallel', () => {
     expect(await balanceOf(w(rahim))).toBe(100_000n - 50_500n);
     expect(await prisma.transaction.count({ where: { type: 'SEND_MONEY' } })).toBe(1);
     expect((await reconcileLedger()).ok).toBe(true);
+  });
+});
+
+describe("a Cash In limit is the customer's: the agent never sees it", () => {
+  beforeEach(async () => {
+    await setLimit('CASH_IN', { maxCountDay: 1 });
+    await fund(w(agent), 1_000_000n, agent.user.id);
+    // Rahim's one Cash In for today is used up.
+    expect((await post('cash-in', body(rahim, '5000'), { as: agent })).status).toBe(201);
+  });
+
+  it('an agent previewing a Cash In to a customer at their limit → 200 (only checks about the caller)', async () => {
+    const res = await request(app)
+      .post('/api/v1/transactions/preview')
+      .set('Authorization', `Bearer ${agent.token}`)
+      .send({ type: 'CASH_IN', receiverPhone: rahim.user.phone, amount: '5000' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ type: 'CASH_IN', amount: '5000', fee: '0' });
+  });
+
+  it('the POST → 422 RECEIVER_LIMIT_EXCEEDED with no details: no "used", no "limit"', async () => {
+    const res = await post('cash-in', body(rahim, '5000'), { as: agent });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe('RECEIVER_LIMIT_EXCEEDED');
+    expect(res.body.error.details).toBeUndefined();
+    const json = JSON.stringify(res.body);
+    expect(json).not.toContain('"used"');
+    expect(json).not.toContain('"limit"');
+    expect(await prisma.transaction.count({ where: { type: 'CASH_IN' } })).toBe(1);
+  });
+});
+
+describe('the money rate limit', () => {
+  it('counts per USER across the money POSTs and preview: the 31st → 429, another user still passes', async () => {
+    // Limiters skip when NODE_ENV is 'test'; switch that off for this test only.
+    const nodeEnv = env.NODE_ENV;
+    env.NODE_ENV = 'development';
+    try {
+      // Bodies the limiter counts and validation then refuses (400): cheap, and no PIN is checked.
+      const preview = (as: Actor) =>
+        request(app)
+          .post('/api/v1/transactions/preview')
+          .set('Authorization', `Bearer ${as.token}`)
+          .send({});
+      // One budget for all five routes: 15 sends + 15 previews use it up.
+      for (let i = 1; i <= 15; i++) {
+        expect((await post('send-money', {}, { as: rahim })).status, `send ${i}`).toBe(400);
+        expect((await preview(rahim)).status, `preview ${i}`).toBe(400);
+      }
+      const blocked = await post('cash-out', {}, { as: rahim });
+      expect(blocked.status).toBe(429);
+      expect(blocked.body.error.code).toBe('RATE_LIMITED');
+
+      // Same IP (supertest, 127.0.0.1), another user: not limited.
+      expect((await post('send-money', {}, { as: karim })).status).toBe(400);
+    } finally {
+      env.NODE_ENV = nodeEnv;
+    }
   });
 });

@@ -181,9 +181,10 @@ describe('checkPeriodLimits', () => {
     await move(agent, rahim, 5_000n, 'CASH_IN');
     await move(agent, rahim, 5_000n, 'CASH_IN');
 
-    await expect(check('CASH_IN', rahim, 5_000n)).rejects.toMatchObject(
-      limitExceeded({ period: 'DAY', kind: 'COUNT', limit: '2', used: '2' }),
-    );
+    // The agent is told only that the customer can't take it: the customer's totals aren't theirs.
+    const err = await check('CASH_IN', rahim, 5_000n).catch((e: unknown) => e);
+    expect(err).toMatchObject({ statusCode: 422, code: 'RECEIVER_LIMIT_EXCEEDED' });
+    expect((err as { details?: unknown }).details).toBeUndefined();
     // The same agent can still cash in to someone else.
     await expect(check('CASH_IN', karim, 5_000n)).resolves.toBeUndefined();
   });
