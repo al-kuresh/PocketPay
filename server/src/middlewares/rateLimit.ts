@@ -26,3 +26,9 @@ export const otpLimiter = createLimiter({ windowMs: 15 * MINUTE, limit: 5 });
 
 /** POST /auth/login: 10 per 15 minutes per IP (on top of the 3-strike PIN lockout). */
 export const loginLimiter = createLimiter({ windowMs: 15 * MINUTE, limit: 10 });
+
+/** The 4 money POSTs and preview: 30 per minute per IP, one budget shared by all five. */
+export const moneyLimiter = createLimiter({ windowMs: MINUTE, limit: 30 });
+
+/** GET /wallets/lookup: 30 per minute per IP, to slow down phone-number enumeration. */
+export const lookupLimiter = createLimiter({ windowMs: MINUTE, limit: 30 });

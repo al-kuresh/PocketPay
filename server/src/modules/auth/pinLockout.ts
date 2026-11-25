@@ -76,7 +76,9 @@ export async function verifyPinWithLockout(
       await tx.user.update({ where: { id: user.id }, data: { failedPinAttempts: failed } });
       return { kind: 'wrong', attemptsLeft: MAX_PIN_ATTEMPTS - failed };
     },
-    { timeout: 10_000 },
+    // maxWait as LEDGER_TX_OPTIONS: parallel requests for one user each hold a pool connection
+    // while they queue on the row lock, so getting a connection can take a while.
+    { maxWait: 5_000, timeout: 10_000 },
   );
 
   // Audit and throw only after the commit: throwing inside would roll back the counter.

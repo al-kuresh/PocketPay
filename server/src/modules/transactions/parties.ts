@@ -13,6 +13,10 @@ export interface Party {
 
 type Account = User & { wallet: Wallet | null };
 
+/** Also thrown by GET /wallets/lookup. */
+export const receiverNotFound = () =>
+  new AppError(404, 'RECEIVER_NOT_FOUND', 'No PocketPay account with this phone number');
+
 /** Also thrown by the transfer guard, which re-reads the status inside the transaction. */
 export const receiverNotActive = () =>
   new AppError(422, 'RECEIVER_NOT_ACTIVE', "This account can't receive money right now");
@@ -40,7 +44,7 @@ export function assertReceiver(
 ): asserts receiver is User & { wallet: Wallet } {
   // An admin has no wallet; any other account without one couldn't receive either.
   if (!receiver || receiver.role === 'ADMIN' || !receiver.wallet) {
-    throw new AppError(404, 'RECEIVER_NOT_FOUND', 'No PocketPay account with this phone number');
+    throw receiverNotFound();
   }
   if (receiver.id === initiator.id) {
     throw new AppError(422, 'CANNOT_SEND_TO_SELF', "You can't send money to yourself");
