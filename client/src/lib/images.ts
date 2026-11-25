@@ -13,6 +13,9 @@ export async function shrinkImage(file: File): Promise<File> {
     canvas.height = Math.round(bitmap.height * scale)
     const ctx = canvas.getContext('2d')
     if (!ctx) return file
+    // JPEG has no alpha: without this, a transparent PNG's see-through pixels come out black.
+    ctx.fillStyle = 'white'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
     ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
     bitmap.close()
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85))

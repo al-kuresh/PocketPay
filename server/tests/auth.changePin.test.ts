@@ -83,7 +83,7 @@ describe('PATCH /auth/pin', () => {
     await createActor({ phone: '01812345678', nid: '1234567891', role: 'CUSTOMER', pin: PIN });
     const stranger = await session('01812345678');
 
-    await changePin({ currentPin: PIN, newPin: NEW_PIN }, me);
+    expect((await changePin({ currentPin: PIN, newPin: NEW_PIN }, me)).status).toBe(204);
 
     expect((await refresh(stranger.cookie)).status).toBe(200);
   });
@@ -123,6 +123,19 @@ describe('PATCH /auth/pin', () => {
     // The same counter as login: one more wrong change and one wrong login make 3 → locked.
     expect((await changePin({ currentPin: WRONG_PIN, newPin: NEW_PIN }, me)).status).toBe(403);
     expect((await login(WRONG_PIN)).status).toBe(423);
+    expect(await audits('PIN_CHANGED')).toHaveLength(0);
+  });
+
+  it('a FROZEN account (frozen after login, access token still valid) → 403 ACCOUNT_FROZEN, PIN unchanged', async () => {
+    const me = await session();
+    const before = (await prisma.user.findUniqueOrThrow({ where: { id: userId } })).pinHash;
+    await prisma.user.update({ where: { id: userId }, data: { status: 'FROZEN' } });
+
+    const res = await changePin({ currentPin: PIN, newPin: NEW_PIN }, me);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('ACCOUNT_FROZEN');
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: userId } })).pinHash).toBe(before);
     expect(await audits('PIN_CHANGED')).toHaveLength(0);
   });
 

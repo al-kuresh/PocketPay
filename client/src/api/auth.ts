@@ -25,6 +25,8 @@ export { refreshSession as refresh } from './client'
 export async function me() {
   const { data } = await api.get<Envelope<MeData>>('/me')
   // Keep the session's user current: a KYC approval (or a new photo) reaches the guards and money buttons without a new login.
-  if (useSession.getState().status === 'authenticated') useSession.setState({ user: data.data.user })
+  // Only for the same user: a late answer for A (who logged out) must not overwrite B, signed in since.
+  const session = useSession.getState()
+  if (session.status === 'authenticated' && session.user?.id === data.data.user.id) useSession.setState({ user: data.data.user })
   return data.data
 }

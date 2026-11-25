@@ -8,6 +8,8 @@ interface AppShellProps {
   /** Already translated. */
   title?: string
   onBack?(): void
+  /** Back shown but not usable, e.g. while a payment is being sent. */
+  backDisabled?: boolean
   /** Show the bottom nav (Home · History · Profile). */
   nav?: boolean
   /** Something on the right of the header, e.g. the language toggle. */
@@ -21,7 +23,7 @@ interface AppShellProps {
 const ON_BRAND = 'bg-primary-dark text-white [&_:focus-visible]:outline-white'
 
 /** MobileShell + an orange app bar (back, title, extra) + an optional hero + the page + an optional bottom nav. */
-export function AppShell({ title, onBack, nav = false, headerEnd, hero, children }: AppShellProps) {
+export function AppShell({ title, onBack, backDisabled, nav = false, headerEnd, hero, children }: AppShellProps) {
   const { t } = useTranslation()
   return (
     <MobileShell>
@@ -32,8 +34,9 @@ export function AppShell({ title, onBack, nav = false, headerEnd, hero, children
               <button
                 type="button"
                 onClick={onBack}
+                disabled={backDisabled}
                 aria-label={t('common.back')}
-                className="-ml-3 flex min-h-11 min-w-11 items-center justify-center rounded-xl text-white hover:bg-primary-darker"
+                className="-ml-3 flex min-h-11 min-w-11 items-center justify-center rounded-xl text-white enabled:hover:bg-primary-darker disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <ArrowLeft aria-hidden className="size-6" />
               </button>

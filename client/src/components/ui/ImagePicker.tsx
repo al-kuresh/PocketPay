@@ -4,7 +4,9 @@ import { useTranslation } from 'react-i18next'
 import { shrinkImage } from '../../lib/images'
 import { Button } from './Button'
 
-const MAX_BYTES = 10 * 1024 * 1024 // the server's limit (multer: 10 MiB per image)
+const MB = 1024 * 1024
+const MAX_PICKED = 30 * MB // a 200 MP phone photo; bigger is not worth decoding on the phone
+const MAX_BYTES = 10 * MB // the server's limit (multer: 10 MiB per image), checked on the shrunk copy
 const TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
 interface ImagePickerProps {
@@ -16,7 +18,7 @@ interface ImagePickerProps {
   error?: string
 }
 
-/** Camera or gallery, with a preview and "Retake". Refuses a wrong type or > 10 MB, then hands on a shrunk copy (lib/images). */
+/** Camera or gallery, with a preview and "Retake". Refuses a wrong type or > 30 MB, shrinks it (lib/images), then refuses a copy still > 10 MB. */
 export function ImagePicker({ label, capture, onChange, error }: ImagePickerProps) {
   const { t } = useTranslation()
   const id = useId()
@@ -31,9 +33,10 @@ export function ImagePicker({ label, capture, onChange, error }: ImagePickerProp
     const picked = e.target.files?.[0]
     if (!picked) return
     if (!TYPES.includes(picked.type)) return setOwnError('errors.UNSUPPORTED_FILE_TYPE')
-    if (picked.size > MAX_BYTES) return setOwnError('errors.FILE_TOO_LARGE')
-    setOwnError(null)
+    if (picked.size > MAX_PICKED) return setOwnError('errors.FILE_TOO_LARGE')
     const file = await shrinkImage(picked)
+    if (file.size > MAX_BYTES) return setOwnError('errors.FILE_TOO_LARGE')
+    setOwnError(null)
     setPreview(URL.createObjectURL(file))
     onChange(file)
   }

@@ -50,5 +50,12 @@ export const pinChangeLimiter = createLimiter({
   keyGenerator: byUser,
 });
 
+/** PUT /me/photo: 10 per 15 minutes per user. Each upload holds up to 10 MB in memory and a sharp decode. */
+export const photoUploadLimiter = createLimiter({
+  windowMs: 15 * MINUTE,
+  limit: 10,
+  keyGenerator: byUser,
+});
+
 /** GET /wallets/lookup: 30 per minute per user, to slow down phone-number enumeration. */
 export const lookupLimiter = createLimiter({ windowMs: MINUTE, limit: 30, keyGenerator: byUser });

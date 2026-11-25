@@ -2,6 +2,7 @@ import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { useSession } from '../stores/session'
 import { apiError, server, testUser } from '../test/server'
+import { me } from './auth'
 import { api, ApiError, restoreSession } from './client'
 
 const user = testUser()
@@ -149,6 +150,46 @@ describe('api client', () => {
     server.use(http.get('/api/v1/me', () => HttpResponse.error()))
     const err = await rejection(api.get('/me'))
     expect(err).toMatchObject({ status: 0, code: 'NETWORK_ERROR' })
+  })
+})
+
+describe('me(): keeping the session user in sync', () => {
+  /** GET /me answers with `who`, but only once `release()` is called. */
+  function heldMe(who: ReturnType<typeof testUser>) {
+    let release!: () => void
+    const held = new Promise<void>((resolve) => (release = resolve))
+    server.use(
+      http.get('/api/v1/me', async () => {
+        await held
+        return HttpResponse.json({ success: true, data: { user: who, wallet: null } })
+      }),
+    )
+    return () => release()
+  }
+
+  it('the same user: /me updates the session user (e.g. a KYC approval)', async () => {
+    const pending = testUser({ status: 'PENDING_KYC' })
+    useSession.getState().signIn({ user: pending, accessToken: 'a' })
+    const release = heldMe({ ...pending, status: 'ACTIVE' })
+    const call = me()
+    release()
+    await call
+    expect(useSession.getState().user?.status).toBe('ACTIVE')
+  })
+
+  it("A's /me answering after A logged out and B logged in does not overwrite B", async () => {
+    const a = testUser({ id: 'aaaaaaaa-0000-4000-8000-000000000001', name: 'User A' })
+    const b = testUser({ id: 'bbbbbbbb-0000-4000-8000-000000000002', name: 'User B' })
+    useSession.getState().signIn({ user: a, accessToken: 'a-token' })
+    const release = heldMe(a)
+    const call = me()
+
+    useSession.getState().clear() // A logs out…
+    useSession.getState().signIn({ user: b, accessToken: 'b-token' }) // …and B logs in on the same phone
+    release()
+    await call
+
+    expect(useSession.getState().user).toEqual(b)
   })
 })
 

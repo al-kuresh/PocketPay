@@ -85,9 +85,11 @@ export async function changePin(input: {
   const { userId, currentPin, newPin, rawRefreshToken, meta } = input;
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, pinHash: true },
+    select: { id: true, pinHash: true, status: true },
   });
   if (!user) throw new AppError(401, 'UNAUTHENTICATED', 'Please log in again');
+  // The access token is stateless (up to 15 min): re-read the status, before the PIN so no attempt is used.
+  if (user.status === 'FROZEN') throw accountFrozen();
 
   await verifyPinWithLockout(user, currentPin, {
     meta,

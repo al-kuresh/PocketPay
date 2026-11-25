@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../../lib/prisma';
 import type { StorageProvider } from '../../lib/storage';
 import { requireAuth } from '../../middlewares/auth';
+import { photoUploadLimiter } from '../../middlewares/rateLimit';
 import { uploadProfilePhoto } from '../../middlewares/upload';
 import { changeProfilePhoto } from './photo.service';
 import { toPublicUser } from '../auth/user.presenter';
@@ -31,9 +32,9 @@ export function createMeRouter(deps: { storage: StorageProvider }): Router {
     });
   });
 
-  // PUT /api/v1/me/photo → a new public profile photo. Token first: strangers are rejected
-  // before multer buffers up to 10 MB.
-  router.put('/photo', requireAuth, uploadProfilePhoto, async (req, res) => {
+  // PUT /api/v1/me/photo → a new public profile photo. Token and the per-user limit first: they
+  // reject before multer buffers up to 10 MB.
+  router.put('/photo', requireAuth, photoUploadLimiter, uploadProfilePhoto, async (req, res) => {
     if (!req.file) {
       throw new AppError(400, 'MISSING_FILE', 'Please upload the photo image', { field: 'photo' });
     }

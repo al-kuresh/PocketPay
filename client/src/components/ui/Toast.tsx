@@ -25,7 +25,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   // A crash in a tap handler (or a promise nobody awaited) is never silent: the generic error toast.
   const { t } = useTranslation()
   useEffect(() => {
-    const crashed = () => api.show(t('errors.GENERIC'))
+    const crashed = (e: Event) => {
+      // "Script error." (a cross-origin script or a browser extension) carries no error object and is not ours.
+      if (e instanceof ErrorEvent && !e.error) return
+      api.show(t('errors.GENERIC'))
+    }
     window.addEventListener('error', crashed)
     window.addEventListener('unhandledrejection', crashed)
     return () => {

@@ -53,7 +53,7 @@ Also the two server endpoints the Profile screen needs: `PATCH /auth/pin` and `P
   - **API error codes are mapped to i18n keys** (`errors.<CODE>`). An unknown code gets a generic message, never the raw `message` field.
   - In Bangla mode, numbers and dates show **Bangla digits** (`bn-BD`), with the same lakh grouping. Inputs accept both digit sets.
   - `<html lang>` follows the language.
-- **Idempotency:** the money POST's `Idempotency-Key` is `crypto.randomUUID()`, created **once per confirm screen** (when the user reaches the PIN step) and **reused** for every retry of that confirm. A new transfer gets a new key.
+- **Idempotency:** the money POST's `Idempotency-Key` is a `uuidV4()` built from `crypto.getRandomValues` (`crypto.randomUUID` is missing over plain-http LAN), created when the user first reaches the PIN step and **reused** while the receiver phone and amount (poisha) stay the same: every retry, Back and back again, a retyped identical amount, a new note. Only a different receiver or amount gets a new key. Back and the PIN are disabled while the POST is pending.
 - **The PIN:**
   - `type="password"`, `inputMode="numeric"`, `autoComplete="off"`
   - cleared from state after every submit, success or failure
@@ -95,7 +95,7 @@ These are the inputs and states most likely to break a real user's session or mo
   3. On success, store the new hash, **revoke every other refresh-token family of the user** (keep the current session's family, from the refresh cookie if present), write a `PIN_CHANGED` audit row, and return 204.
   4. It uses `moneyLimiter`-style per-user rate limiting (a new `pinChangeLimiter`, 5 per 15 minutes per user).
 - **`PUT /api/v1/me/photo`** (any logged-in user), `multipart/form-data`, field `photo`:
-  - **Reuse** the Phase 3 upload pipeline: multer memory, 2 MB, `file-type` check, `sharp` with `.rotate()`, EXIF stripped, the 512×512 WebP avatar.
+  - **Reuse** the Phase 3 upload pipeline: multer memory, 10 MB (shrunk on the phone first), `file-type` check, `sharp` with `.rotate()`, EXIF stripped, the 512×512 WebP avatar.
   - Store it as a **public** object, create a `user_documents` row (`kind: PROFILE`, `access: PUBLIC`), and set `users.profile_photo_key`.
   - Delete the previous public profile object (best effort: a failed delete is logged by key, never fails the request).
   - Return `{ user: PublicUser }`.
@@ -220,7 +220,7 @@ export function errorMessage(t: TFunction, err: unknown): string   // ApiError c
   - `tabular-nums` on money, phone numbers and TrxIDs
 - **`AmountInput`** shows `৳`, accepts typing in either digit set, and reports the parsed poisha (via `takaToPoisha`) or an error key.
 - **`PinInput`** is 5 boxes backed by one hidden `type="password"` input, so paste and the phone's numeric keypad work. It has a `clear()` method the parent calls after every submit.
-- **`ImagePicker`** uses `accept="image/jpeg,image/png,image/webp"`, with a `capture` option for the selfie. It refuses over 2 MB before upload (with a translated error), and shows a preview with "retake".
+- **`ImagePicker`** uses `accept="image/jpeg,image/png,image/webp"`, with a `capture` option for the selfie. It refuses over 30 MB, shrinks the photo on the phone (longest side 1600px, JPEG), then refuses a copy still over 10 MB (with a translated error), and shows a preview with "retake".
 - **`StatusBanner`** covers PENDING_KYC (`warning-dark` text), REJECTED, and the demo banner "Do not upload a real NID".
 
 - [ ] **Step 1: Write the failing tests:**

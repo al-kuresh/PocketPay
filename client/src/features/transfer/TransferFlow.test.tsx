@@ -191,6 +191,41 @@ describe('TransferFlow: Send Money', () => {
     }
   })
 
+  it.each([
+    ['NotAllowedError', true],
+    ['AbortError', false],
+  ])('navigator.share rejects with %s → copy fallback used: %s', async (name, copies) => {
+    const { user } = await renderPage('/send-money')
+    await enterDetails(user)
+    await confirmPreview(user)
+    await submitPin(user)
+    await screen.findByText('PP7K2M9QXA')
+
+    const share = vi.fn().mockRejectedValue(new DOMException('no', name))
+    Object.defineProperty(navigator, 'share', { value: share, configurable: true })
+    const clipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
+    const execCommand = vi.fn(() => true)
+    const originalExec = document.execCommand
+    document.execCommand = execCommand
+    try {
+      await user.click(screen.getByRole('button', { name: en.transfer.share }))
+      expect(share).toHaveBeenCalled()
+      if (copies) {
+        expect(execCommand).toHaveBeenCalledWith('copy')
+        expect(screen.getByRole('status')).toHaveTextContent(en.transfer.copied)
+      } else {
+        // The user closed the share sheet on purpose: nothing else happens.
+        expect(execCommand).not.toHaveBeenCalled()
+        expect(screen.getByRole('status')).toBeEmptyDOMElement()
+      }
+    } finally {
+      Reflect.deleteProperty(navigator, 'share')
+      if (clipboard) Object.defineProperty(navigator, 'clipboard', clipboard)
+      document.execCommand = originalExec
+    }
+  })
+
   it('Review focus #2: a network error, then "Try again" → the SAME key, and the (replayed) receipt shows', async () => {
     answers = ['network']
     const { user } = await renderPage('/send-money')
@@ -232,6 +267,67 @@ describe('TransferFlow: Send Money', () => {
     expect(posts[1].body.amount).toBe('60000')
     expect(posts[1].key).toMatch(UUID)
     expect(posts[1].key).not.toBe(posts[0].key)
+  })
+
+  /** A NETWORK_ERROR on the money POST (did it pay? unknown), then Back to Enter. */
+  async function networkErrorThenBack(user: User) {
+    answers = ['network']
+    await enterDetails(user)
+    await confirmPreview(user)
+    await submitPin(user)
+    await screen.findByText(en.errors.NETWORK_ERROR)
+    await user.click(screen.getByRole('button', { name: en.common.back }))
+  }
+
+  it('after a NETWORK_ERROR: Back, delete and retype the SAME amount, confirm → the SAME key (no double payment)', async () => {
+    const { user } = await renderPage('/send-money')
+    await networkErrorThenBack(user)
+    const amount = screen.getByLabelText(en.transfer.amount)
+    await user.clear(amount)
+    await user.type(amount, '500')
+    await user.click(screen.getByRole('button', { name: en.transfer.next }))
+    await confirmPreview(user)
+    await submitPin(user)
+
+    expect(await screen.findByText('PP7K2M9QXA')).toBeInTheDocument()
+    expect(posts).toHaveLength(2)
+    expect(posts[1].key).toBe(posts[0].key)
+  })
+
+  it('after a NETWORK_ERROR: Back, change only the note, confirm → the SAME key', async () => {
+    const { user } = await renderPage('/send-money')
+    await networkErrorThenBack(user)
+    await user.type(screen.getByLabelText(en.transfer.note), 'rent')
+    await user.click(screen.getByRole('button', { name: en.transfer.next }))
+    await confirmPreview(user)
+    await submitPin(user)
+
+    expect(await screen.findByText('PP7K2M9QXA')).toBeInTheDocument()
+    expect(posts).toHaveLength(2)
+    expect(posts[1].key).toBe(posts[0].key)
+  })
+
+  it('while the money POST is pending: Back and the PIN field are disabled', async () => {
+    let release!: () => void
+    const held = new Promise<void>((resolve) => (release = resolve))
+    server.use(
+      http.post('/api/v1/transactions/send-money', async () => {
+        await held
+        return HttpResponse.json(apiError('INVALID_PIN', { attemptsLeft: 2 }), { status: 403 })
+      }),
+    )
+    const { user } = await renderPage('/send-money')
+    await enterDetails(user)
+    await confirmPreview(user)
+    await submitPin(user)
+
+    expect(await screen.findByRole('button', { name: en.transfer.confirm, busy: true })).toBeDisabled()
+    expect(screen.getByRole('button', { name: en.common.back })).toBeDisabled()
+    expect(pinField()).toBeDisabled()
+
+    release()
+    expect(await screen.findByText('Wrong PIN. 2 attempts left before your account locks.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: en.common.back })).toBeEnabled()
   })
 
   it('INVALID_PIN → still on the PIN step, the PIN cleared, attempts left shown', async () => {

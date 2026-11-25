@@ -135,44 +135,84 @@ describe('ImagePicker', () => {
     expect(renderPicker().input).toHaveAttribute('accept', 'image/jpeg,image/png,image/webp')
   })
 
-  it('an 11 MB file → the size error, and onChange is not called', async () => {
+  /** A browser that can decode and re-encode: the canvas records what is drawn, toBlob answers `bytes` of JPEG. */
+  function canvasStubs(bytes = 300_000, size = { width: 4000, height: 3000 }) {
+    const bitmap = { ...size, close: vi.fn() }
+    const decode = vi.fn().mockResolvedValue(bitmap)
+    vi.stubGlobal('createImageBitmap', decode)
+    const calls: string[] = []
+    const ctx = {
+      set fillStyle(v: string) {
+        calls.push(`fillStyle=${v}`)
+      },
+      fillRect: vi.fn((...a: number[]) => calls.push(`fillRect(${a.join(',')})`)),
+      drawImage: vi.fn((_b: unknown, ...a: number[]) => calls.push(`drawImage(${a.join(',')})`)),
+    }
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx as unknown as CanvasRenderingContext2D)
+    const toBlob = vi
+      .spyOn(HTMLCanvasElement.prototype, 'toBlob')
+      .mockImplementation((done) => done(new Blob([new Uint8Array(bytes)], { type: 'image/jpeg' })))
+    return { bitmap, decode, calls, toBlob }
+  }
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('a 31 MB file → the size error at once (nothing is decoded), and onChange is not called', async () => {
+    const { decode } = canvasStubs()
     const { input, onChange } = renderPicker()
-    fireEvent.change(input, { target: { files: [file(11 * MB)] } })
+    fireEvent.change(input, { target: { files: [file(31 * MB)] } })
+    expect(await screen.findByRole('alert')).toHaveTextContent(en.errors.FILE_TOO_LARGE)
+    expect(decode).not.toHaveBeenCalled()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('a 25 MB phone photo (200 MP) is shrunk first, and the small copy is accepted', async () => {
+    canvasStubs(400_000)
+    const { input, onChange } = renderPicker()
+    fireEvent.change(input, { target: { files: [file(25 * MB, 'IMG_200MP.jpg')] } })
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1))
+    expect(onChange.mock.calls[0][0]).toMatchObject({ name: 'IMG_200MP.jpg', size: 400_000 })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('a 25 MB file that cannot be shrunk (still over 10 MB) → the size error, and onChange is not called', async () => {
+    vi.stubGlobal('createImageBitmap', vi.fn().mockRejectedValue(new DOMException('too big', 'InvalidStateError')))
+    const { input, onChange } = renderPicker()
+    fireEvent.change(input, { target: { files: [file(25 * MB)] } })
     expect(await screen.findByRole('alert')).toHaveTextContent(en.errors.FILE_TOO_LARGE)
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  it('a file of exactly 10 MB is accepted (the server limit is 10 MiB)', async () => {
+  it('a file of exactly 10 MB that cannot be shrunk is still accepted (the server limit is 10 MiB)', async () => {
     const { input, onChange } = renderPicker()
-    fireEvent.change(input, { target: { files: [file(10 * MB)] } })
+    fireEvent.change(input, { target: { files: [file(10 * MB)] } }) // jsdom has no createImageBitmap
     await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1))
   })
 
   it('uploads the shrunk copy: longest side 1600px, JPEG 0.85, EXIF orientation applied', async () => {
-    const bitmap = { width: 4000, height: 3000, close: vi.fn() }
-    const decode = vi.fn().mockResolvedValue(bitmap)
-    vi.stubGlobal('createImageBitmap', decode)
-    const drawImage = vi.fn()
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage } as unknown as CanvasRenderingContext2D)
-    const toBlob = vi
-      .spyOn(HTMLCanvasElement.prototype, 'toBlob')
-      .mockImplementation((done) => done(new Blob([new Uint8Array(300_000)], { type: 'image/jpeg' })))
-    try {
-      const { input, onChange } = renderPicker()
-      const original = file(8 * MB, 'IMG_2041.png', 'image/png')
-      fireEvent.change(input, { target: { files: [original] } })
-      await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1))
+    const { bitmap, decode, calls, toBlob } = canvasStubs()
+    const { input, onChange } = renderPicker()
+    const original = file(8 * MB, 'IMG_2041.png', 'image/png')
+    fireEvent.change(input, { target: { files: [original] } })
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1))
 
-      expect(decode).toHaveBeenCalledWith(original, { imageOrientation: 'from-image' })
-      expect(drawImage).toHaveBeenCalledWith(bitmap, 0, 0, 1600, 1200)
-      expect(toBlob).toHaveBeenCalledWith(expect.any(Function), 'image/jpeg', 0.85)
-      const sent = onChange.mock.calls[0][0] as File
-      expect(sent).not.toBe(original)
-      expect(sent).toMatchObject({ name: 'IMG_2041.jpg', type: 'image/jpeg', size: 300_000 })
-    } finally {
-      vi.unstubAllGlobals()
-      vi.restoreAllMocks()
-    }
+    expect(decode).toHaveBeenCalledWith(original, { imageOrientation: 'from-image' })
+    expect(bitmap.close).toHaveBeenCalled()
+    expect(calls).toContain('drawImage(0,0,1600,1200)')
+    expect(toBlob).toHaveBeenCalledWith(expect.any(Function), 'image/jpeg', 0.85)
+    const sent = onChange.mock.calls[0][0] as File
+    expect(sent).not.toBe(original)
+    expect(sent).toMatchObject({ name: 'IMG_2041.jpg', type: 'image/jpeg', size: 300_000 })
+  })
+
+  it('fills the canvas white before drawing, so a transparent PNG does not turn black in the JPEG', async () => {
+    const { calls } = canvasStubs(300_000, { width: 800, height: 600 })
+    const { input, onChange } = renderPicker()
+    fireEvent.change(input, { target: { files: [file(MB, 'logo.png', 'image/png')] } })
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1))
+    expect(calls).toEqual(['fillStyle=white', 'fillRect(0,0,800,600)', 'drawImage(0,0,800,600)'])
   })
 
   it('keeps the original when the browser cannot decode it', async () => {
@@ -271,6 +311,12 @@ describe('Toast', () => {
     act(() => useLanguage.getState().setLang('bn'))
     act(() => void window.dispatchEvent(event()))
     expect(screen.getByRole('status')).toHaveTextContent(bn.errors.GENERIC)
+  })
+
+  it('ignores an error event with no error object ("Script error." from a cross-origin script or an extension)', () => {
+    render(<ToastProvider>page</ToastProvider>)
+    act(() => void window.dispatchEvent(new ErrorEvent('error', { message: 'Script error.' })))
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
   })
 
   it('useToast().show() displays the message, then it goes away', () => {

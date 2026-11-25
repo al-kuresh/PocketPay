@@ -2,6 +2,7 @@ import sharp from 'sharp';
 import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app';
+import { env } from '../src/config/env';
 import { logger } from '../src/lib/logger';
 import { prisma } from '../src/lib/prisma';
 import { MemoryStorage } from '../src/lib/storage/memory';
@@ -174,6 +175,38 @@ describe('PUT /me/photo', () => {
 
     expect(res.status).toBe(413);
     expect(res.body.error.code).toBe('FILE_TOO_LARGE');
+  });
+
+  it('rate-limits per USER: the 11th upload in 15 minutes is 429, another user still passes', async () => {
+    // Limiters skip when NODE_ENV is 'test'; switch that off for this test only.
+    const nodeEnv = env.NODE_ENV;
+    env.NODE_ENV = 'development';
+    try {
+      const small = await testJpeg(64, 64);
+      for (let i = 1; i <= 10; i++) {
+        expect((await putPhoto(small)).status, `upload ${i}`).toBe(200);
+      }
+      const blocked = await putPhoto(small);
+      expect(blocked.status).toBe(429);
+      expect(blocked.body.error.code).toBe('RATE_LIMITED');
+
+      const other = await createActor({ phone: '01812345678', nid: '1234567891', role: 'CUSTOMER' });
+      expect((await putPhoto(small, other.token)).status).toBe(200);
+    } finally {
+      env.NODE_ENV = nodeEnv;
+    }
+  });
+
+  it('a FROZEN account (access token still valid) → 403 ACCOUNT_FROZEN, nothing stored', async () => {
+    await prisma.user.update({ where: { id: userId }, data: { status: 'FROZEN' } });
+    const objects = storage.objects.size;
+
+    const res = await putPhoto(await testJpeg());
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('ACCOUNT_FROZEN');
+    expect(await profileKey()).toBe(oldKey);
+    expect(storage.objects.size).toBe(objects);
   });
 
   it('no file → 400 MISSING_FILE', async () => {

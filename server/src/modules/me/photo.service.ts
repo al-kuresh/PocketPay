@@ -4,6 +4,7 @@ import { logger } from '../../lib/logger';
 import { prisma } from '../../lib/prisma';
 import type { StorageProvider } from '../../lib/storage';
 import { AppError } from '../../utils/AppError';
+import { accountFrozen } from '../auth/refresh.service';
 import { toPublicUser, type PublicUser } from '../auth/user.presenter';
 
 /**
@@ -16,6 +17,10 @@ export async function changeProfilePhoto(input: {
   storage: StorageProvider;
 }): Promise<PublicUser> {
   const { userId, image, storage } = input;
+  // The access token is stateless (up to 15 min): re-read the status before any work.
+  const owner = await prisma.user.findUnique({ where: { id: userId }, select: { status: true } });
+  if (!owner) throw new AppError(401, 'UNAUTHENTICATED', 'Please log in again');
+  if (owner.status === 'FROZEN') throw accountFrozen();
 
   // The Phase 3 pipeline: real-type check, .rotate(), EXIF stripped, 512×512 WebP.
   const avatar = await processImage(image, { mode: 'avatar' });

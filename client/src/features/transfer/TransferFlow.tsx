@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowRight, CircleCheck, Share2 } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -64,16 +64,20 @@ export function TransferFlow({ type }: { type: TxType }) {
   const [preview, setPreview] = useState<Preview | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [receipt, setReceipt] = useState<Receipt | null>(null)
-  // One key per confirm: made when the PIN step opens, reused by every retry, dropped by any change to the details.
-  const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null)
+  // One key per payment: made when the PIN step first opens, and kept (every retry, Back and back again, a new note)
+  // while the receiver and amount it was made for stay the same. Only a different receiver or amount gets a new
+  // one: a lost response ("did it pay?") followed by a retyped, identical amount must replay, never pay twice.
+  const [key, setKey] = useState<{ value: string; phone: string; amount: string } | null>(null)
+  const sending = useIsMutating({ mutationKey: ['transfer'] }) > 0
 
   function change(patch: Partial<Details>) {
     setDetails((d) => ({ ...d, ...patch }))
-    setIdempotencyKey(null)
   }
 
   function openPin() {
-    if (!idempotencyKey) setIdempotencyKey(uuidV4())
+    const phone = preview?.receiver.phone ?? ''
+    const amount = preview?.amount ?? ''
+    if (!key || key.phone !== phone || key.amount !== amount) setKey({ value: uuidV4(), phone, amount })
     setStep('pin')
   }
 
@@ -88,7 +92,7 @@ export function TransferFlow({ type }: { type: TxType }) {
     step === 'enter' ? () => void navigate('/') : step === 'receipt' ? undefined : () => setStep('enter')
 
   return (
-    <AppShell title={t(flow.titleKey)} onBack={onBack}>
+    <AppShell title={t(flow.titleKey)} onBack={onBack} backDisabled={sending}>
       {step === 'enter' && (
         <EnterStep
           type={type}
@@ -103,12 +107,12 @@ export function TransferFlow({ type }: { type: TxType }) {
         />
       )}
       {step === 'preview' && preview && <PreviewStep preview={preview} notice={notice} onNext={openPin} />}
-      {step === 'pin' && preview && idempotencyKey && (
+      {step === 'pin' && preview && key && (
         <PinStep
           flow={flow}
           preview={preview}
           note={details.note}
-          idempotencyKey={idempotencyKey}
+          idempotencyKey={key.value}
           onSuccess={succeed}
           onRefused={(message) => {
             setNotice(message)
@@ -257,6 +261,7 @@ function PinStep({ flow, preview, note, idempotencyKey, onSuccess, onRefused }: 
   const [failure, setFailure] = useState<{ message: string; network: boolean } | null>(null)
 
   const send = useMutation({
+    mutationKey: ['transfer'], // TransferFlow disables Back while this is pending
     mutationFn: (value: string) =>
       transfer(
         flow.path,
@@ -296,6 +301,7 @@ function PinStep({ flow, preview, note, idempotencyKey, onSuccess, onRefused }: 
         <p className="text-3xl font-semibold tabular-nums text-text">{formatTaka(preview.total, { lang })}</p>
       </div>
       <PinInput
+        disabled={send.isPending}
         ref={pinInput}
         label={t('transfer.pin')}
         error={failure?.message}
@@ -332,10 +338,11 @@ export function ReceiptView({ receipt }: { receipt: Receipt }) {
     if (typeof navigator.share === 'function') {
       try {
         await navigator.share({ text: t('transfer.shareText', { trxId: receipt.trxId }) })
-      } catch {
-        // the user closed the share sheet
+        return
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') return // the user closed the share sheet
+        // anything else (NotAllowedError, no share target): copy instead
       }
-      return
     }
     if (await copyText(receipt.trxId)) toast.show(t('transfer.copied'), 'success')
     else toast.show(t('transfer.copyByHand', { trxId: receipt.trxId })) // the user can still read it off the toast

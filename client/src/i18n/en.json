@@ -149,7 +149,7 @@
     "REGISTRATION_TOKEN_INVALID": "Your sign-up has timed out. Please start again.",
     "MISSING_FILE": "A photo is missing.",
     "UPLOAD_FAILED": "The upload failed. Try again.",
-    "FILE_TOO_LARGE": "This image is too large. Use one under 10 MB.",
+    "FILE_TOO_LARGE": "This image is too large. Choose a smaller photo.",
     "UNSUPPORTED_FILE_TYPE": "Use a JPEG, PNG or WebP image.",
     "INVALID_CREDENTIALS": "Wrong phone number or PIN.",
     "ACCOUNT_LOCKED": "Too many wrong PINs. Your account is locked for now.",

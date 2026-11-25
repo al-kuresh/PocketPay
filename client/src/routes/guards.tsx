@@ -8,6 +8,10 @@ import { useSession } from '../stores/session'
 function SessionSkeleton() {
   return (
     <MobileShell>
+      {/* The same orange app bar as AppShell, so the screen does not flash white before the page. */}
+      <div aria-hidden className="bg-primary-dark pt-safe">
+        <div className="h-16" />
+      </div>
       <div aria-busy="true" className="m-6 h-32 animate-pulse rounded-2xl bg-surface-sunken" />
     </MobileShell>
   )
