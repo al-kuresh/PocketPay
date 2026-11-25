@@ -1,11 +1,16 @@
 import { createBrowserRouter, Navigate, type RouteObject } from 'react-router'
 import { Login } from '../pages/auth/Login'
 import { RegisterWizard } from '../pages/auth/register/RegisterWizard'
+import { CashIn } from '../pages/agent/CashIn'
 import { CashOut } from '../pages/customer/CashOut'
 import { Payment } from '../pages/customer/Payment'
 import { SendMoney } from '../pages/customer/SendMoney'
+import { ChangePin } from '../pages/shared/ChangePin'
+import { History } from '../pages/shared/History'
+import { Profile } from '../pages/shared/Profile'
+import { ReceiptPage } from '../pages/shared/Receipt'
 import { RequireActive, RequireAnonymous, RequireAuth, RequireRole } from './guards'
-import { Home, Page } from './placeholders'
+import { Home } from './home'
 
 export const routes: RouteObject[] = [
   {
@@ -19,6 +24,11 @@ export const routes: RouteObject[] = [
     element: <RequireAuth />,
     children: [
       { index: true, element: <Home /> },
+      // Any role and any status: history and receipts are read-only; Profile is every user's own.
+      { path: 'history', element: <History /> },
+      { path: 'transactions/:trxId', element: <ReceiptPage /> },
+      { path: 'profile', element: <Profile /> },
+      { path: 'profile/pin', element: <ChangePin /> },
       {
         element: <RequireRole role="CUSTOMER" />,
         children: [
@@ -34,7 +44,7 @@ export const routes: RouteObject[] = [
       },
       {
         element: <RequireRole role="AGENT" />,
-        children: [{ element: <RequireActive />, children: [{ path: 'cash-in', element: <Page titleKey="flows.CASH_IN.title" /> }] }],
+        children: [{ element: <RequireActive />, children: [{ path: 'cash-in', element: <CashIn /> }] }],
       },
     ],
   },

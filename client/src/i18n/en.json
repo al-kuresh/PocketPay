@@ -31,14 +31,9 @@
     "CASH_IN": {
       "title": "Cash In",
       "receiver": "Customer's number"
-    }
-  },
-  "placeholder": {
-    "home": {
-      "CUSTOMER": "Customer home",
-      "AGENT": "Agent home",
-      "MERCHANT": "Merchant home",
-      "ADMIN": "Admin home"
+    },
+    "FLOAT_TOPUP": {
+      "title": "Float top-up"
     }
   },
   "common": {
@@ -201,7 +196,8 @@
     "recent": "Recent transactions",
     "seeAll": "See all",
     "empty": "No transactions yet",
-    "emptyBody": "Money you send or receive shows up here."
+    "emptyBody": "Money you send or receive shows up here.",
+    "eMoney": "E-money balance"
   },
   "transfer": {
     "amount": "Amount",
@@ -227,5 +223,55 @@
     "share": "Share",
     "copied": "TrxID copied.",
     "shareText": "PocketPay TrxID: {{trxId}}"
+  },
+  "history": {
+    "type": "Type",
+    "all": "All types",
+    "from": "From date",
+    "to": "To date",
+    "loadMore": "Load more",
+    "empty": "No transactions found",
+    "emptyBody": "Money you send or receive shows up here. Try another type or date range."
+  },
+  "receipt": {
+    "title": "Receipt",
+    "notFound": "Transaction not found",
+    "notFoundBody": "It doesn't exist, or it isn't one of yours.",
+    "backToHistory": "Back to history"
+  },
+  "merchant": {
+    "yourNumber": "Your number for payments",
+    "yourNumberHint": "Customers pay you by choosing Payment and entering this number."
+  },
+  "profile": {
+    "photo": "Profile photo",
+    "nid": "NID",
+    "role": "Account type",
+    "shopName": "Shop name",
+    "status": "Account status",
+    "kyc": "Document check",
+    "changePhoto": "Change photo",
+    "photoChanged": "Photo updated.",
+    "changePin": "Change PIN"
+  },
+  "status": {
+    "PENDING_KYC": "Under review",
+    "ACTIVE": "Active",
+    "FROZEN": "Frozen",
+    "REJECTED": "Not approved"
+  },
+  "kycStatus": {
+    "PENDING": "Pending",
+    "APPROVED": "Approved",
+    "REJECTED": "Not approved",
+    "NONE": "Not submitted"
+  },
+  "changePin": {
+    "title": "Change PIN",
+    "current": "Current PIN",
+    "new": "New PIN",
+    "confirm": "Type the new PIN again",
+    "submit": "Change PIN",
+    "done": "PIN changed. Your other devices were logged out."
   }
 }

@@ -299,7 +299,8 @@ function signedTaka(amount: string, lang: Lang) {
   return { out, text: formatTaka(amount.replace(/^[-+]/, ''), { sign: out ? 'out' : 'in', lang }) }
 }
 
-function ReceiptView({ receipt }: { receipt: Receipt }) {
+/** A receipt: the flow's last step, and the receipt page (`/transactions/:trxId`). */
+export function ReceiptView({ receipt }: { receipt: Receipt }) {
   const { t } = useTranslation()
   const lang = useLanguage((s) => s.lang)
   const navigate = useNavigate()

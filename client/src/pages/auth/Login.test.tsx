@@ -94,7 +94,8 @@ describe('Login', () => {
     loginAnswers(testUser({ role: 'AGENT', phone: '01800000004' }))
     const { user } = visit()
     await user.click(screen.getByRole('button', { name: en.login.demo.AGENT }))
-    expect(await screen.findByRole('heading', { name: en.placeholder.home.AGENT })).toBeInTheDocument()
+    // The agent's home: its own money action, Cash In.
+    expect(await screen.findByRole('button', { name: en.flows.CASH_IN.title })).toBeInTheDocument()
     expect(loginBodies).toEqual([{ phone: '01800000004', pin: '48213' }])
   })
 

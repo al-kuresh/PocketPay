@@ -40,7 +40,7 @@ describe('route guards', () => {
   it('an AGENT at a customer page → the agent home', async () => {
     signIn({ role: 'AGENT', status: 'ACTIVE' })
     const router = visit('/send-money')
-    expect(await screen.findByRole('heading', { name: 'Agent home' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Cash In' })).toBeInTheDocument() // the agent home's own action
     expect(router.state.location.pathname).toBe('/')
   })
 
@@ -54,14 +54,14 @@ describe('route guards', () => {
   it('a REJECTED agent typing /cash-in → home', async () => {
     signIn({ role: 'AGENT', status: 'REJECTED', kycStatus: 'REJECTED' })
     const router = visit('/cash-in')
-    expect(await screen.findByRole('heading', { name: 'Agent home' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Cash In' })).toBeInTheDocument() // the agent home's own action
     expect(router.state.location.pathname).toBe('/')
   })
 
   it('a signed-in user who opens /login → their home', async () => {
     signIn({ role: 'AGENT', status: 'ACTIVE' })
     const router = visit('/login')
-    expect(await screen.findByRole('heading', { name: 'Agent home' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Cash In' })).toBeInTheDocument() // the agent home's own action
     expect(router.state.location.pathname).toBe('/')
   })
 
