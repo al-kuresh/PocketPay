@@ -23,6 +23,19 @@ export function validateBody(schema: ZodType): RequestHandler {
   };
 }
 
+/** Validate `req.params` against `schema`; the parsed data goes on `res.locals.params`. */
+export function validateParams(schema: ZodType): RequestHandler {
+  return (req, res, next) => {
+    const result = schema.safeParse(req.params);
+    if (!result.success) {
+      next(validationError(result.error));
+      return;
+    }
+    res.locals.params = result.data;
+    next();
+  };
+}
+
 /** Validate `req.query` against `schema`; the parsed data goes on `res.locals.query`. */
 export function validateQuery(schema: ZodType): RequestHandler {
   return (req, res, next) => {

@@ -23,6 +23,37 @@ export interface PublicReceipt {
   mine: { amount: string; balanceAfter: string };
 }
 
+/** One line of the caller's history: their own ledger entry and who was on the other side. */
+export interface HistoryItem {
+  trxId: string;
+  type: TransactionType;
+  direction: 'IN' | 'OUT';
+  /** The absolute value of the caller's own entry: what their balance actually changed by. */
+  amount: string;
+  counterparty: Party;
+  balanceAfter: string;
+  createdAt: string; // ISO
+}
+
+type WithUser = { user: User | null };
+
+export function toHistoryItem(
+  e: LedgerEntry & { transaction: Transaction & { fromWallet: WithUser; toWallet: WithUser } },
+): HistoryItem {
+  const t = e.transaction;
+  const out = e.amount < 0n;
+  return {
+    trxId: t.trxId,
+    type: t.type,
+    direction: out ? 'OUT' : 'IN',
+    amount: poishaToString(out ? -e.amount : e.amount),
+    // The sender sees who got it; anyone credited (receiver, agent's commission) sees the sender.
+    counterparty: toParty(out ? t.toWallet.user : t.fromWallet.user),
+    balanceAfter: poishaToString(e.balanceAfter),
+    createdAt: t.createdAt.toISOString(),
+  };
+}
+
 export function toReceipt(
   t: Transaction & { entries: LedgerEntry[] },
   parties: { from: User | null; to: User | null },
