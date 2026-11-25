@@ -1,16 +1,25 @@
+import type { Request } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { env } from '../config/env';
 import { AppError } from '../utils/AppError';
 
 const MINUTE = 60_000;
 
-// Counts per client IP (req.ip). In production behind a proxy (Render, Railway…), every
+// Counts per client IP (req.ip) unless a keyGenerator says otherwise (the money and lookup
+// limiters count per user). In production behind a proxy (Render, Railway…), every
 // request would come from the proxy's IP unless the app sets app.set('trust proxy', 1)
 // so req.ip is the real client: that's Phase 9.
-export function createLimiter(opts: { windowMs: number; limit: number; skip?: () => boolean }) {
+export function createLimiter(opts: {
+  windowMs: number;
+  limit: number;
+  skip?: () => boolean;
+  /** Default: the client IP. */
+  keyGenerator?: (req: Request) => string;
+}) {
   return rateLimit({
     windowMs: opts.windowMs,
     limit: opts.limit,
+    keyGenerator: opts.keyGenerator, // undefined → express-rate-limit's own IP key
     standardHeaders: 'draft-8',
     legacyHeaders: false,
     skip: opts.skip ?? (() => env.NODE_ENV === 'test'),
@@ -26,3 +35,13 @@ export const otpLimiter = createLimiter({ windowMs: 15 * MINUTE, limit: 5 });
 
 /** POST /auth/login: 10 per 15 minutes per IP (on top of the 3-strike PIN lockout). */
 export const loginLimiter = createLimiter({ windowMs: 15 * MINUTE, limit: 10 });
+
+// Per user, not per IP: Bangladeshi mobile networks put many phones behind one IP (CGNAT).
+// Only for routes after requireAuth, which sets req.user.
+const byUser = (req: Request) => req.user!.id;
+
+/** The 4 money POSTs and preview: 30 per minute per user, one budget shared by all five. */
+export const moneyLimiter = createLimiter({ windowMs: MINUTE, limit: 30, keyGenerator: byUser });
+
+/** GET /wallets/lookup: 30 per minute per user, to slow down phone-number enumeration. */
+export const lookupLimiter = createLimiter({ windowMs: MINUTE, limit: 30, keyGenerator: byUser });

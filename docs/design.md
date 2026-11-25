@@ -126,7 +126,7 @@ Seeded fees are **modelled on bKash's published charges** (checked on 2026-11-23
 | Send Money | Customer → Customer | Free up to ৳100; **৳5** per transaction above ৳100 | Can't send to yourself or to a non-customer |
 | Cash In | Agent → Customer | Free | Agent needs enough e-money float |
 | Cash Out | Customer → Agent | **1.85%** (৳18.50 per ৳1,000) | The agent's commission is 0.40% of the amount (my assumption; I couldn't find a public rate). The rest is platform revenue |
-| Payment | Customer → Merchant | Free for the customer | Merchant fee configurable, default 0 |
+| Payment | Customer → Merchant | Free for the customer | Merchant fee configurable, default 0. It is **deducted from the merchant's credit**: the customer pays the price only. A payment whose fee would be ≥ the amount is refused (`AMOUNT_BELOW_MINIMUM`) |
 | Float Top-up | System → Agent | Free | Admin only; represents the agent buying e-money |
 
 ### 6.4 Limits (seed defaults, modelled on bKash's published customer limits)
@@ -141,7 +141,9 @@ Seeded fees are **modelled on bKash's published charges** (checked on 2026-11-23
 - **Maximum wallet balance for customers: ৳5,00,000.** Any incoming Send Money or Cash In that would push a customer above this is rejected. Agent, merchant and system wallets have no cap.
 - "No limit" is stored as `NULL` in `limit_rules`.
 - "Day" and "month" use the **Asia/Dhaka** time zone.
-- The limit checks for a customer cover the money they **send**. The receiver's balance cap is checked separately.
+- **Daily and monthly limits count against the customer in every flow:** the sending customer for Send Money, Cash Out and Payment, and the **receiving customer** for Cash In. Agents and merchants have no period limits.
+- Limits count the transaction **amount** (what the receiver is sent), not amount + fee, over the customer's `COMPLETED` transactions of the same type.
+- The receiver's balance cap is checked separately, and only when the receiver is a customer.
 
 ### 6.5 History and receipts
 - Paginated list with filters (type, date range); each entry shows sign, amount, counterparty and time.
@@ -304,7 +306,7 @@ The API sends amounts as **strings** (e.g. `"150050"` = ৳1,500.50), because Ja
 | `user_documents` | id, user_id, kind (`NID_FRONT/NID_BACK/SELFIE/PROFILE`), storage_key (Cloudinary public_id), access (`PRIVATE/PUBLIC`), mime, size_bytes, width, height, created_at | Metadata for uploaded images |
 | `wallets` | id, user_id (unique; NULL for system wallets), type (`CUSTOMER/AGENT/MERCHANT/SYSTEM_FEES/SYSTEM_FLOAT`), balance (BIGINT, cached), created_at. No `version` column: concurrency is handled by row locks (§8.4), not optimistic versioning | Holds each account's balance |
 | `transactions` | id, trx_id (unique, human-readable), type, status (`COMPLETED/REVERSED`), amount, fee, from_wallet_id, to_wallet_id, initiated_by (→ users: who pressed confirm, e.g. the agent for a Cash In, the admin for a Float Top-up), idempotency_key, note, created_at | One row per business event |
-| `ledger_entries` | id, seq (BIGINT, auto-increment, unique), transaction_id, wallet_id, amount (signed BIGINT: − debit / + credit; never 0), balance_after, created_at. `seq` is the true order of a wallet's entries: it's assigned at insert under the wallet lock, while `created_at` is the DB transaction's start time, so a transfer that waited for a lock can carry an earlier timestamp | The source of truth; each transaction's entries sum to **0** |
+| `ledger_entries` | id, seq (BIGINT, auto-increment, unique), transaction_id, wallet_id, amount (signed BIGINT: − debit / + credit; never 0), balance_after, created_at. `seq` is the true order of a wallet's entries: Postgres assigns it at insert, under the wallet lock. `created_at` can't be trusted for that order: Prisma stamps `@default(now())` from the **app server's clock** when it builds the insert (not Postgres's `now()`), so it has millisecond ties, can step back when the clock is corrected, and isn't shared between API instances | The source of truth; each transaction's entries sum to **0** |
 | `fee_rules` | type, flat_fee, percent_bp (basis points), agent_commission_bp, min_amount_for_fee | Configurable fees |
 | `limit_rules` | type, min_amount, max_per_txn, max_count_day, max_count_month, max_amount_day, max_amount_month (NULL = no limit) | Configurable limits |
 | `system_settings` | key, value | e.g. `CUSTOMER_MAX_BALANCE = 50000000` (poisha). `KYC_AUTO_APPROVE` is an env var, not a row here: it's a deployment choice (demo vs. real), not something an admin toggles |
@@ -347,9 +349,13 @@ write is creating a wallet with balance 0). It is pure accounting: it knows noth
 limits, PINs or roles. Each money flow (Phase 5) does its business checks and hands it the
 postings (e.g. the rows in §8.3).
 
-**In the flow, before `postTransaction`** (Phase 5):
-1. Validate the request (Zod) and verify the PIN with bcrypt. A wrong PIN increments the attempts counter and may lock the account.
-2. Calculate the fee from `fee_rules` and build the postings.
+**In the flow, before `postTransaction`** (implemented in Phase 5, `server/src/modules/transactions/transfer.service.ts`). The order matters: the receiver and the amount are checked **before** the PIN, so a typo in either never costs a PIN attempt.
+1. **Request checks, in this order:**
+   1. the body (Zod) and the `Idempotency-Key` header (a UUID), in the HTTP layer
+   2. the initiator: the role the flow needs (403 `FORBIDDEN`) and status `ACTIVE` (403 `ACCOUNT_NOT_ACTIVE`)
+   3. the receiver: exists and isn't an admin (404 `RECEIVER_NOT_FOUND`), isn't the initiator, has the role the flow needs, is `ACTIVE`
+   4. the amount bounds from `limit_rules`, the fee from `fee_rules` (a payment whose merchant fee ≥ the amount → 422 `AMOUNT_BELOW_MINIMUM`), then the postings
+2. **Then the PIN**, with the lockout shared with login (§10). A wrong PIN counts an attempt and may lock the account.
 
 **In `postTransaction`:**
 
@@ -363,13 +369,13 @@ postings (e.g. the rows in §8.3).
    - `ORDER BY id`: every transaction takes its locks in the same global order, so two opposite transfers (A→B and B→A) can't deadlock. A control test locks "from, then to" instead and deadlocks (`40P01`).
    - `FOR NO KEY UPDATE`, not `FOR UPDATE`: it's the lock a plain `UPDATE` takes, so money operations on the same wallet still run one at a time, but it doesn't block other sessions' foreign-key checks (`FOR KEY SHARE`) on that wallet, e.g. another transaction inserting a row that references it.
    - Prisma's query API has no row locks, so this uses `tx.$queryRaw` inside `prisma.$transaction`. A wallet that isn't found → `404 WALLET_NOT_FOUND`.
-6. **Idempotency, checked after the lock:** if a transaction with this `(from_wallet, idempotency_key)` exists with the same type, amount and receiver, return it (a replay). With any difference → `409 IDEMPOTENCY_KEY_REUSED`. Checking under the lock means a parallel duplicate waits on the "from" wallet, then sees the committed row: 5 identical requests at once give 1 transaction and 4 replays. The client generates one UUID per confirm screen, so a double tap or a network retry is safe. The unique index on `(from_wallet_id, idempotency_key)` is the backstop.
-7. **The guard hook:** the flow's `guard` callback runs here, under the locks and before anything is written, with the locked balances (a read-only copy: the rows are frozen, so a guard can't change what the balance check sees). Phase 5 puts its checks here: both users `ACTIVE` and roles matching the flow; `limit_rules` (sum of today's and this month's completed transactions, Asia/Dhaka time); the ৳5,00,000 customer balance cap. Throwing aborts everything.
+6. **Idempotency, checked after the lock:** if a transaction with this `(from_wallet, idempotency_key)` exists with the same type, amount and receiver, return it (a replay). With any difference → `409 IDEMPOTENCY_KEY_REUSED`. Checking under the lock means a parallel duplicate waits on the "from" wallet, then sees the committed row: 5 identical requests at once give 1 transaction and 4 replays. The client generates one UUID per confirm screen, so a double tap or a network retry is safe. The unique index on `(from_wallet_id, idempotency_key)` is the backstop. A replay returns **before** the guard (step 7), so a used-up limit can't block it. The flow's own checks (steps 1–2) do run again on a replay: a replay after the receiver was frozen returns `RECEIVER_NOT_ACTIVE`, not the original receipt.
+7. **The guard hook:** the flow's `guard` callback runs here, under the locks and before anything is written, with the locked balances (a read-only copy: the rows are frozen, so a guard can't change what the balance check sees). Phase 5's guard (`makeTransferGuard`, implemented) does, in order, with the transaction client for every read: (a) the **sender's own balance** on the locked row (`INSUFFICIENT_BALANCE`), first, so a sender who can't pay learns nothing about the receiver's balance from the cap; step 8 stays as the backstop; (b) re-reads **both users' status**, so a freeze after the pre-checks, or under a still-valid access token, is caught (`ACCOUNT_NOT_ACTIVE` / `RECEIVER_NOT_ACTIVE`); (c) the customer's **period limits** (`limit_rules`: today's and this month's completed transactions, Asia/Dhaka time, on the side the flow table says). The window's "now" is the app's clock, read here, just before the insert: Prisma fills `created_at` (`@default(now())`) from the app's clock, not the database's, so this is the day the row lands in. An earlier "now" could only widen a window (they have no upper bound), never let a limit be passed; (d) for a customer receiver, the ৳5,00,000 **balance cap on the locked balance**. The preview **only checks things about the caller**, on unlocked reads: (a), (b), and (c) when the limits are the caller's own. It skips (d) and the receiving customer's Cash In limits, so it can't be used to probe a receiver's balance or Cash In totals. When a limit that belongs to the receiver (Cash In) stops the real POST, the error is `422 RECEIVER_LIMIT_EXCEEDED` with no details; the caller's own limit gives `LIMIT_EXCEEDED` with its period, limit and amount used. Only here are these checks binding: the customer's wallet is locked, so parallel requests can't both pass (10 parallel sends with `maxCountDay = 3` → exactly 3 succeed). Roles are checked in step 1; they don't change. Throwing aborts everything.
 8. **Balance check:** each wallet's balance plus its posting must stay ≥ 0, except `SYSTEM_FLOAT` → otherwise `422 INSUFFICIENT_BALANCE`.
 9. Insert the `transactions` row and its `ledger_entries` (each with `balance_after`), and set each wallet's cached `balance` to the computed value.
 10. **Commit.** The deferred zero-sum trigger (§8.5) checks the entries here. If the random `trx_id` already exists, the whole transaction is retried with a new one (up to 3 attempts).
 
-**In the flow, after commit** (Phase 5): write an audit log entry and return the receipt.
+**In the flow, after commit:** return the receipt (`201`, or `200` with `replayed: true` for a replay). There is **no audit row per money movement**: the `transactions` row is already the immutable record of who, what and when (`initiated_by`, `created_at`, guard 9 in §8.5). The audit log records the *security* events of money requests: `TRANSACTION_PIN_FAILED` and `ACCOUNT_LOCKED`.
 
 **Reconciliation** (`reconcileLedger()`, run by `npm run ledger:check`; an admin button in Phase 7). Five SQL checks, all in **one `REPEATABLE READ` transaction**, so they read the same snapshot and the report is consistent even while money is moving:
 1. Every wallet's cached `balance` equals the sum of its entries (a wallet with no entries must be 0).
@@ -424,13 +430,13 @@ Base path `/api/v1`. Responses use this shape:
 | PATCH `/auth/pin` | user | Change PIN |
 | GET `/me` | user | Profile (masked NID, photo URL, KYC status) + wallet summary |
 | PUT `/me/photo` | user | `multipart/form-data`: replace the profile photo |
-| GET `/wallets/lookup?phone=` | user | Masked name and role of a receiver |
-| POST `/transactions/preview` | user | Fee, total and limit check before confirming |
+| GET `/wallets/lookup?phone=` | active customer, agent | Masked name (or a merchant's shop name) and role of a receiver |
+| POST `/transactions/preview` | customer, agent | Fee, total, balance and limit check before confirming (not the receiver's cap) |
 | POST `/transactions/send-money` | customer | — |
 | POST `/transactions/cash-out` | customer | — |
 | POST `/transactions/payment` | customer | — |
 | POST `/transactions/cash-in` | agent | — |
-| GET `/transactions` | user | Own history (type, from, to, page) |
+| GET `/transactions` | user | Own history (type, from, to, cursor, limit) |
 | GET `/transactions/:trxId` | user | Own receipt |
 | GET `/kyc` | user | Own KYC status (+ rejection reason) |
 | POST `/kyc/resubmit` | rejected user | `multipart/form-data`: new NID front, back, selfie |
@@ -443,24 +449,27 @@ Base path `/api/v1`. Responses use this shape:
 | GET `/admin/reconcile` | admin | Ledger check |
 | GET `/admin/audit-logs` | admin | Audit trail |
 
-Money endpoints take an `Idempotency-Key` header.
+The 4 money POSTs require an `Idempotency-Key` header (a UUID): `201` for a new transaction, `200` with `replayed: true` for a replay. Full request and response examples: `docs/api.md`.
 
 ---
 
 ## 10. Security
 
-- **PIN** is hashed with bcrypt and never logged or returned. Lockout after 3 failures.
+- **PIN** is hashed with bcrypt and never logged or returned. Lockout after 3 failures, for 30 minutes.
+  - **One lockout for login and money requests:** the same `failed_pin_attempts` / `locked_until` columns, so 3 wrong PINs on money requests lock login too, and the other way round.
+  - **PIN checks are serialized per user with a row lock.** `verifyPinWithLockout` runs in one DB transaction with `SELECT … FROM users … FOR NO KEY UPDATE`, re-reads `failed_pin_attempts` and `locked_until` under that lock (never trusting the user object it was given), and does the bcrypt compare while holding it. Parallel wrong guesses still compare at most 3 PINs; parallel right PINs all pass; a crash rolls the whole check back. The audit row and the error come **after** the commit, because throwing inside would roll back the counter.
+  - **One user's PIN checks queue in memory first.** `withKeyLock(user.id, …)` (`server/src/lib/keyedMutex.ts`) runs them one at a time per user before they open the DB transaction, so a waiting request holds no pool connection and one user's parallel requests can't take the pool from everyone else. Login and money requests share the queue. It is per process, so the row lock stays: it is what keeps the check correct across API instances.
 - **Access token:** JWT, 15-minute life, kept **in memory** on the client (not in localStorage).
 - Access tokens are stateless (15 min). Every money endpoint (Phase 5) re-reads the user's status inside its DB transaction, so a frozen account can't move money even with a valid access token.
 - **Refresh token:** random value, stored **hashed** in the DB, 7-day life, **rotated** on every use, sent as an `httpOnly; Secure; SameSite` cookie. Presenting an already-rotated token more than 10 seconds after its rotation revokes the whole session (within 10 seconds it's treated as a concurrent refresh from a second tab: that request gets 409 `REFRESH_IN_PROGRESS`, its cookie is left alone, and the client retries once with the new cookie — the Phase 6 client does this).
 - **Hardening:**
   - `helmet` headers.
   - Strict CORS (only the frontend origin).
-  - Rate limits on auth and money endpoints.
+  - Rate limits on auth and money endpoints. Money POSTs, preview and the receiver lookup are limited **per user** (30 per minute each budget; they run after `requireAuth`), which is safe behind CGNAT. Login and OTP run before anyone is known, so they stay per IP.
   - Request body size limit.
   - Zod validation on every input.
   - Prisma parameterised queries (no SQL injection).
-- **Authorization:** `requireRole()` middleware; users can only read their own transactions.
+- **Authorization:** `requireRole()` middleware; users can only read their own transactions. A receipt for a transaction the caller's wallet has no entry in is `404 TRANSACTION_NOT_FOUND`, exactly like an unknown id, so nobody can probe other people's trxIds.
 - **Secrets:** only in `.env` (git-ignored); `.env.example` is committed with placeholder values.
 - **Uploads:**
   - file type, size and count limits enforced in multer (in memory, never written to disk)
@@ -468,7 +477,9 @@ Money endpoints take an `Idempotency-Key` header.
   - re-encoded with `sharp`, which strips EXIF
   - KYC images stored privately; only admins get signed, short-lived URLs
 - **NID privacy:** masked in every response except admin KYC review; never written to logs.
-- **Audit log:** logins, failed PINs, admin actions (including every time an admin views a KYC record) and money movements.
+- **Phone numbers in logs:** the request log records the method and the path **without the query string** (no `req.query`), because `GET /wallets/lookup?phone=` would otherwise log a full phone number. Header redaction (authorization, cookies) is unchanged.
+- **Receiver privacy:** the receiver lookup requires an `ACTIVE` caller, so an account still in KYC or rejected can't enumerate who is on PocketPay. A receiver's balance never shows through the cap: the preview doesn't check the cap, and the guard checks the sender's own balance before it (§8.4). A Cash In customer's limits don't show either: the preview only checks things about the caller, and the POST's `RECEIVER_LIMIT_EXCEEDED` carries no details.
+- **Audit log:** logins, failed PINs, admin actions (including every time an admin views a KYC record) and failed PINs and lockouts on money requests. Not every money movement: the `transactions` row is that record (§8.4).
 - **Cross-site cookies:** if the frontend and API end up on different domains, the cookie needs `SameSite=None; Secure`. The alternative is serving the API behind the frontend's domain. Decide at deploy time (§12).
 
 ---
@@ -546,7 +557,10 @@ Money endpoints take an `Idempotency-Key` header.
 
 **Production notes**
 - Rate limits use an in-memory store: counters reset on restart and aren't shared across instances. With more than one instance, use a shared store (Phase 9).
-- Bangladeshi mobile networks use CGNAT (many users share one IP). Before real use, key the login/OTP limits by IP + phone with a more generous per-IP limit (Phase 9).
+- Bangladeshi mobile networks use CGNAT (many users share one IP). The money and lookup limits are already per user (Phase 5), so this now applies **only to the login/OTP limits**, which run before anyone is known. Before real use, key those by IP + phone with a more generous per-IP limit (Phase 9).
+- **Limit windows and `created_at` use the app server's clock** (Prisma stamps `created_at`; the guard reads the same clock for the Dhaka day and month). With more than one API instance, keep their clocks synced (NTP).
+- **Every PIN check holds a pool connection during bcrypt** (70–100 ms), because it runs under the user's row lock (§10). One user's parallel requests queue in memory and hold at most one connection (per API instance), but a burst of logins or money requests from **many** users can still take all of the pool's connections (about 10), and other requests then wait (up to `maxWait`, 5 s, before failing). Before real use, watch the pool size under load and consider a per-phone login limit (Phase 9).
+- **`SYSTEM_FEES` is one hot row.** Every fee-bearing transfer (Send Money above ৳100, Cash Out) posts to it, so `postTransaction` locks it, which serializes those transfers platform-wide, guard queries included. Fine at demo scale. v2 options: split the fees wallet into several shards (pick one per transfer; reconciliation sums them), or collect fees asynchronously (post the fee to a per-transfer pending entry and sweep it into `SYSTEM_FEES` in batches).
 
 ---
 
@@ -607,6 +621,17 @@ Money endpoints take an `Idempotency-Key` header.
 
 **Phase 4 build (2026-11-24):**
 - I. **Row locks + DB guards instead of optimistic versioning.** `wallets.version` is dropped. Wallets are locked with `SELECT … ORDER BY id FOR NO KEY UPDATE` (§8.4), so concurrent operations on a wallet wait instead of failing and retrying. The database guards in §8.5 refuse negative, unbalanced or edited ledger data even if the code has a bug.
+
+**Phase 5 build (2026-11-25):**
+- J. **Limits count against the customer in every flow:** the sender for Send Money, Cash Out and Payment, the receiving customer for Cash In. Agents and merchants have no period limits. Limits count the amount, not amount + fee (§6.4).
+- K. **The receiver must be ACTIVE.** Checked before the PIN and re-read inside the guard: a frozen or pending account can't receive money.
+- L. **One PIN lockout for login and money:** the same counter, 3 attempts, 30 minutes.
+- M. **No audit row per money movement.** The `transactions` row is the immutable record; the audit log keeps the security events (failed PINs, lockouts).
+- N. **Merchants are shown by shop name**, unmasked, because it is a public business name. People are shown by masked name ("Rahim U***"), system wallets as "PocketPay".
+- O. **PIN checks are serialized per user with a row lock instead of an attempt claim.** The first version claimed one of the 3 attempts before bcrypt; more than 3 parallel requests with the right PIN then got `423 ACCOUNT_LOCKED` naming a lock that didn't exist. The row lock keeps "at most 3 compares" for parallel guesses and lets parallel right PINs all pass (§10).
+- P. **Money and lookup rate limits are per user**, not per IP, because of CGNAT (§10, §12). Login and OTP stay per IP.
+- Q. **The preview only checks things about the caller.** It already skipped the receiver's cap; it now also skips a Cash In customer's limits, and the POST refuses those with `RECEIVER_LIMIT_EXCEEDED` and no details. Before, `LIMIT_EXCEEDED { used }` told any agent a customer's Cash In totals (§8.4, §10).
+- R. **One user's PIN checks queue in memory before the row lock**, so their waiting requests hold no DB connection (§10).
 
 ## 16. Left to the builder
 - Exact component styling within the §11 palette (decided in Phase 6).

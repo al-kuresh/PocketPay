@@ -2,7 +2,7 @@
 
 A mobile-first digital wallet (bKash-style) built as a full-stack, production-grade project.
 
-> 🚧 Work in progress — **Phase 4 (wallets + double-entry ledger) complete**; next up: Phase 5 (money flows).
+> 🚧 Work in progress — **Phase 5 (money flows) complete**: Send Money, Cash In, Cash Out and Payment over the API, with fees, limits, the balance cap, PIN checks, idempotency, preview, receiver lookup, history and receipts. Next up: Phase 6 (frontend screens).
 
 ## Features (planned for v1)
 - Registration with phone, OTP, 10-digit NID, and NID/selfie photo upload
@@ -22,6 +22,7 @@ A mobile-first digital wallet (bKash-style) built as a full-stack, production-gr
 - [Phase 2 plan](docs/plans/2026-11-23-phase-2-repo-setup.md)
 - [Phase 3 plan](docs/plans/2026-11-24-phase-3-auth-registration.md)
 - [Phase 4 plan](docs/plans/2026-11-24-phase-4-wallet-ledger.md)
+- [Phase 5 plan](docs/plans/2026-11-24-phase-5-money-flows.md)
 - [ER diagram](docs/diagrams/erd.md)
 
 ## Run locally
@@ -99,6 +100,45 @@ curl -s -X POST $API/auth/logout -b cookies.txt -c cookies.txt -o /dev/null -w '
 Uploaded images land in `server/uploads/` (git-ignored). Users can't be deleted (their
 documents and audit history must stay), so to run the flow again use another phone and NID,
 e.g. `01700000001` / `1234567891`.
+
+### Try it with curl: send money
+With the API running and the database seeded (the [demo accounts](#demo-accounts) below).
+Money is poisha as a string: `"50000"` is ৳500.00.
+
+```bash
+API=http://localhost:4000/api/v1
+
+# 1. Log in as Rahim and keep the access token
+TOKEN=$(curl -s -X POST $API/auth/login -H 'Content-Type: application/json' \
+  -d '{"phone":"01800000002","pin":"48213"}' \
+  | sed -E 's/.*"accessToken":"([^"]+)".*/\1/')
+
+# 2. Who is 01800000003? → { "name": "Karim H***", "role": "CUSTOMER" }
+curl -s "$API/wallets/lookup?phone=01800000003" -H "Authorization: Bearer $TOKEN"
+
+# 3. Preview ৳500: fee "500" (৳5), total "50500"
+curl -s -X POST $API/transactions/preview -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"type":"SEND_MONEY","receiverPhone":"01800000003","amount":"50000"}'
+
+# 4. Send it. One new Idempotency-Key per transaction → 201 with the receipt
+KEY=$(node -p 'crypto.randomUUID()')
+curl -s -X POST $API/transactions/send-money -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -H "Idempotency-Key: $KEY" \
+  -d '{"receiverPhone":"01800000003","amount":"50000","pin":"48213"}' \
+  -w '\nHTTP %{http_code}\n'
+
+# 5. The same request with the same key (a retry) → 200, "replayed": true, money moved once
+curl -s -X POST $API/transactions/send-money -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -H "Idempotency-Key: $KEY" \
+  -d '{"receiverPhone":"01800000003","amount":"50000","pin":"48213"}' \
+  -w '\nHTTP %{http_code}\n'
+
+# 6. History, newest first
+curl -s "$API/transactions?limit=5" -H "Authorization: Bearer $TOKEN"
+```
+
+Then `npm run ledger:check` (in `server/`) proves the ledger still balances.
 
 ### Demo accounts
 Created by `npm run db:seed`. All use the PIN **`48213`** and are already `ACTIVE`. The phones and

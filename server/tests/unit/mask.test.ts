@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { maskNid, maskPhone } from '../../src/utils/mask';
+import { maskName, maskNid, maskPhone } from '../../src/utils/mask';
+
+describe('maskName', () => {
+  it('keeps the first word and shortens the rest to an initial', () => {
+    expect(maskName('Rahim Uddin')).toBe('Rahim U***');
+  });
+
+  it('trims and collapses whitespace first', () => {
+    expect(maskName('  Md   Karim Hasan ')).toBe('Md K*** H***');
+  });
+
+  it('a single-word name keeps its first 2 letters', () => {
+    expect(maskName('Rahim')).toBe('Ra***');
+  });
+});
 
 describe('maskNid', () => {
   it('shows only the last 3 digits', () => {
