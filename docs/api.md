@@ -343,17 +343,22 @@ the phone or the amount never costs a PIN attempt:
 3. the receiver → `404 RECEIVER_NOT_FOUND`, `422 CANNOT_SEND_TO_SELF`, `422 INVALID_RECEIVER`, `422 RECEIVER_NOT_ACTIVE`
 4. the amount → `422 AMOUNT_BELOW_MINIMUM`, `422 AMOUNT_ABOVE_MAXIMUM`
 5. the PIN → `403 INVALID_PIN`, `423 ACCOUNT_LOCKED` (the same 3-strike lockout as login)
-6. under the wallet locks → `403 ACCOUNT_NOT_ACTIVE` / `422 RECEIVER_NOT_ACTIVE` (a freeze since
-   step 2), `422 LIMIT_EXCEEDED`, `422 RECEIVER_BALANCE_LIMIT`, `422 INSUFFICIENT_BALANCE`
+6. under the wallet locks, in this order → `422 INSUFFICIENT_BALANCE` (the sender's own balance,
+   first: a sender who can't pay learns nothing about the receiver), `403 ACCOUNT_NOT_ACTIVE` /
+   `422 RECEIVER_NOT_ACTIVE` (a freeze since step 2), `422 LIMIT_EXCEEDED`,
+   `422 RECEIVER_BALANCE_LIMIT`
 
 A replay runs steps 1–5 again, then returns the original transaction (step 6 is skipped). So a
 replay after the receiver was frozen gets `422 RECEIVER_NOT_ACTIVE` rather than the receipt.
 
 ### `POST /transactions/preview`
 
-The fee and total before the PIN screen. Runs every check above except the PIN, without
-locking anything, plus a balance check. **Who:** CUSTOMER or AGENT (for the flows their role
-can start). **Rate limit:** shared with the money POSTs. **No `Idempotency-Key`**: nothing is written.
+The fee and total before the PIN screen. Runs checks 1–4 above (without the `Idempotency-Key`),
+then, without locking anything: the sender's balance, both accounts' status and the limits.
+It does **not** check the receiver's balance cap: an answer about the cap would tell anyone the
+receiver's balance, so only the real POST checks it. **Who:** CUSTOMER or AGENT (for the flows
+their role can start). **Rate limit:** shared with the money POSTs. **No `Idempotency-Key`**:
+nothing is written.
 
 ```json
 { "type": "SEND_MONEY", "receiverPhone": "01800000003", "amount": "50000" }
@@ -380,12 +385,14 @@ can start). **Rate limit:** shared with the money POSTs. **No `Idempotency-Key`*
 the fee). A preview is informative only: a parallel request can still change the outcome, and
 only the money POST's own checks are binding.
 
-Errors: the same as the money POSTs, except the PIN, `Idempotency-Key` and replay ones. A
+Errors: the same as the money POSTs, except the PIN, `Idempotency-Key` and replay ones and
+`RECEIVER_BALANCE_LIMIT` (so a preview can pass and the POST still be refused by the cap). A
 `type` the caller's role can't start (an agent previewing `SEND_MONEY`) → `403 FORBIDDEN`.
 
 ### `GET /wallets/lookup?phone=`
 
-Who is behind a phone number, before sending to it. **Who:** CUSTOMER or AGENT.
+Who is behind a phone number, before sending to it. **Who:** an `ACTIVE` CUSTOMER or AGENT (an
+account still in KYC, or rejected, can't enumerate who is on PocketPay).
 **Rate limit:** 30 / min per user (slows down phone-number enumeration).
 
 ```bash
@@ -405,6 +412,7 @@ A merchant → `{ "name": "Demo Store", "role": "MERCHANT" }` (its shop name).
 | `400 VALIDATION_ERROR` | `phone` missing or not `01XXXXXXXXX` |
 | `404 RECEIVER_NOT_FOUND` | no account with this phone, **or an admin's phone** (answered the same) |
 | `403 FORBIDDEN` | the caller is a merchant or an admin |
+| `403 ACCOUNT_NOT_ACTIVE` | the caller isn't `ACTIVE` (`PENDING_KYC`, `REJECTED`, `FROZEN`). `details: { status }` |
 
 ### `GET /transactions`
 

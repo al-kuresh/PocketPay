@@ -187,7 +187,8 @@ describe('reconcileLedger', () => {
         { walletId: f.float.id, amount: -100n, balanceAfter: -100n },
         { walletId: f.alice.wallet.id, amount: 100n, balanceAfter: 100n },
       ]);
-      // Committed second (higher seq) but its DB transaction started earlier.
+      // Written second (higher seq) but stamped earlier: created_at is an app server's clock
+      // (another instance's, or one that was corrected backwards), not the write order.
       const startedEarlier = new Date('2000-01-01T00:00:00Z');
       await writeRaw(f, [
         { walletId: f.float.id, amount: -50n, balanceAfter: -150n, createdAt: startedEarlier },

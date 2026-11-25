@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Wallet } from '../src/generated/prisma/client';
 import { prisma } from '../src/lib/prisma';
 import { postTransaction } from '../src/modules/ledger/ledger.service';
@@ -272,6 +272,8 @@ describe('makeTransferGuard re-reads both statuses inside the transaction', () =
         limit: (await loadRules(prisma, 'SEND_MONEY')).limit,
         customerWalletId: w(rahim),
         receiverWalletId: w(karim),
+        senderWalletId: w(rahim),
+        debit: amount,
         amount,
         credit: amount,
         now: new Date(),
@@ -307,10 +309,11 @@ describe('the balance cap', () => {
     await fund(w(karim), 90_000n, karim.user.id);
     await fund(w(rahim), 100_000n, rahim.user.id);
 
-    await expect(previewTransfer(req(10_001n))).rejects.toEqual(
+    // The cap is enforced only by the real POST: a preview answer would leak the receiver's balance.
+    await expect(previewTransfer(req(10_001n))).resolves.toMatchObject({ total: '10501' });
+    await expect(send(10_001n)).rejects.toEqual(
       appError('RECEIVER_BALANCE_LIMIT', { statusCode: 422 }),
     );
-    await expect(send(10_001n)).rejects.toEqual(appError('RECEIVER_BALANCE_LIMIT'));
     expect(await moneyTransactions()).toBe(0);
     expect(await balanceOf(w(rahim))).toBe(100_000n);
 
@@ -320,9 +323,66 @@ describe('the balance cap', () => {
 
   it('never caps an agent or merchant receiver', async () => {
     await setSetting('CUSTOMER_MAX_BALANCE', '1000');
-    await fund(w(rahim), 1_000_000n, rahim.user.id);
+    await fund(w(rahim), 2_000_000n, rahim.user.id);
     await send(500_000n, { type: 'PAYMENT', to: shop });
     expect(await balanceOf(w(shop))).toBe(500_000n);
+    await send(500_000n, { type: 'CASH_OUT', to: agent });
+    expect(await balanceOf(w(agent))).toBe(502_000n); // ৳5,000 + ৳20 commission, far over the cap
+  });
+
+  it('a preview never checks the cap: a send to a customer at the cap → 200', async () => {
+    await setSetting('CUSTOMER_MAX_BALANCE', '100000');
+    await fund(w(karim), 100_000n, karim.user.id); // exactly at the cap
+    await fund(w(rahim), 100_000n, rahim.user.id);
+
+    await expect(previewTransfer(req(10_000n))).resolves.toMatchObject({
+      fee: '0',
+      total: '10000',
+    });
+  });
+
+  it('a ৳0 sender to a customer at the cap → INSUFFICIENT_BALANCE, never RECEIVER_BALANCE_LIMIT', async () => {
+    await setSetting('CUSTOMER_MAX_BALANCE', '100000');
+    await fund(w(karim), 100_000n, karim.user.id);
+
+    // The sender's own balance is checked first, so a sender who can't pay learns nothing
+    // about the receiver's balance.
+    await expect(send(10_000n)).rejects.toEqual(
+      appError('INSUFFICIENT_BALANCE', { statusCode: 422 }),
+    );
+    await expect(previewTransfer(req(10_000n))).rejects.toEqual(
+      appError('INSUFFICIENT_BALANCE', { statusCode: 422 }),
+    );
+    expect(await moneyTransactions()).toBe(0);
+  });
+});
+
+describe('the limit window', () => {
+  it('is the day the row lands in: it uses the clock that stamps created_at (the app’s)', async () => {
+    await fund(w(rahim), 100_000n, rahim.user.id);
+    await setLimit('SEND_MONEY', { maxCountDay: 1 });
+    await send(10_000n); // today's 1 is used
+
+    // The app's clock runs a day ahead of the DB's (an extreme skew, to make it visible).
+    const realNow = Date.now();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(realNow + 86_400_000);
+    try {
+      // Prisma fills @default(now()) itself, from the app's clock: this row lands TOMORROW...
+      const { receipt } = await send(10_000n);
+      const row = await prisma.transaction.findUniqueOrThrow({ where: { trxId: receipt.trxId } });
+      expect(row.createdAt.getTime() - realNow).toBeGreaterThan(86_400_000 - 60_000);
+      // ...so it was rightly checked against tomorrow's empty window, and the next one is
+      // checked against tomorrow too: refused. (A DB-clock window would have refused the
+      // first and checked the wrong day.)
+      await expect(send(10_000n)).rejects.toEqual(
+        appError('LIMIT_EXCEEDED', {
+          details: { period: 'DAY', kind: 'COUNT', limit: '1', used: '1' },
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

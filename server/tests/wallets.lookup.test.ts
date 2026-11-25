@@ -106,6 +106,31 @@ describe('GET /wallets/lookup', () => {
     }
   });
 
+  it('a PENDING_KYC or REJECTED caller → 403 ACCOUNT_NOT_ACTIVE { status }', async () => {
+    const pending = await createActor({
+      phone: '01777777777',
+      nid: '7777777777',
+      role: 'CUSTOMER',
+      status: 'PENDING_KYC',
+    });
+    const rejected = await createActor({
+      phone: '01788888888',
+      nid: '8888888888',
+      role: 'CUSTOMER',
+      status: 'REJECTED',
+    });
+
+    for (const [caller, status] of [
+      [pending, 'PENDING_KYC'],
+      [rejected, 'REJECTED'],
+    ] as const) {
+      const res = await lookup(rahim.user.phone, caller);
+      expect(res.status, status).toBe(403);
+      expect(res.body.error).toMatchObject({ code: 'ACCOUNT_NOT_ACTIVE', details: { status } });
+      expect(JSON.stringify(res.body)).not.toContain('Rahim');
+    }
+  });
+
   it('no token → 401; a MERCHANT or ADMIN → 403 FORBIDDEN', async () => {
     expect((await lookup(rahim.user.phone, null)).status).toBe(401);
     for (const as of [shop, admin]) {

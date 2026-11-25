@@ -6,6 +6,7 @@ import { lookupLimiter } from '../../middlewares/rateLimit';
 import { validateQuery } from '../../middlewares/validate';
 import { phoneSchema } from '../auth/auth.schemas';
 import { findAccountByPhone, receiverNotFound, toParty } from '../transactions/parties';
+import { accountNotActive } from '../transactions/transfer.service';
 
 const lookupQuery = z.object({ phone: phoneSchema });
 
@@ -18,7 +19,15 @@ walletsRouter.get(
   requireRole('CUSTOMER', 'AGENT'),
   lookupLimiter,
   validateQuery(lookupQuery),
-  async (_req, res) => {
+  async (req, res) => {
+    // Only an account that may send money may look up receivers: a PENDING_KYC or REJECTED
+    // account (identity never verified) must not enumerate who is on PocketPay.
+    const caller = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { status: true },
+    });
+    if (caller?.status !== 'ACTIVE') throw accountNotActive(caller?.status);
+
     const { phone } = res.locals.query as z.infer<typeof lookupQuery>;
     const account = await findAccountByPhone(prisma, phone);
     // An admin answers exactly like an unknown phone, as in assertReceiver.

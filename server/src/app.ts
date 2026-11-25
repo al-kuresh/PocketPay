@@ -2,9 +2,9 @@ import express, { type Express } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import { pinoHttp } from 'pino-http';
 import { env } from './config/env';
 import path from 'node:path';
+import { httpLogger } from './lib/httpLogger';
 import { logger } from './lib/logger';
 import { ConsoleOtpProvider, type OtpProvider } from './lib/otp';
 import { createStorage, type StorageProvider } from './lib/storage';
@@ -37,22 +37,7 @@ export function createApp(deps: AppDeps = {}): Express {
   app.use(cors({ origin: env.CLIENT_ORIGIN, credentials: true }));
   app.use(express.json({ limit: '100kb' }));
   app.use(cookieParser());
-  if (env.NODE_ENV !== 'test') {
-    app.use(
-      pinoHttp({
-        logger,
-        // Tokens and session cookies must never reach the logs.
-        redact: {
-          paths: [
-            'req.headers.authorization',
-            'req.headers.cookie',
-            'res.headers["set-cookie"]',
-          ],
-          censor: '[REDACTED]',
-        },
-      }),
-    );
-  }
+  if (env.NODE_ENV !== 'test') app.use(httpLogger(logger));
 
   // Profile photos from LocalStorage (dev). Only public/ is served; KYC images live in private/.
   app.use('/uploads', express.static(path.resolve(LOCAL_UPLOADS_DIR, 'public')));

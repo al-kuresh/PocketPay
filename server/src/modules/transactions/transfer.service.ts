@@ -24,7 +24,6 @@ export interface TransferRequest {
   initiatorId: string;
   receiverPhone: string;
   amount: bigint;
-  now?: Date;
 }
 
 export interface TransferPreview {
@@ -39,28 +38,42 @@ export interface TransferPreview {
 type Guard = NonNullable<PostTransactionInput['guard']>;
 
 const forbidden = () => new AppError(403, 'FORBIDDEN', 'You do not have access to this');
-const accountNotActive = (status: UserStatus | undefined) =>
+const insufficientBalance = () => new AppError(422, 'INSUFFICIENT_BALANCE', 'Insufficient balance');
+/** Also used by GET /wallets/lookup. */
+export const accountNotActive = (status: UserStatus | undefined) =>
   new AppError(403, 'ACCOUNT_NOT_ACTIVE', "Your account can't move money right now", { status });
 
 /**
- * The checks that must hold under the ledger's wallet locks, in this order: both users still
- * ACTIVE (a freeze after the pre-checks, or under a still-valid token), the customer's period
- * limits, and the balance cap of a CUSTOMER receiver on its LOCKED balance. Every read uses `tx`.
+ * The checks that must hold under the ledger's wallet locks, in this order: the sender can pay
+ * (first, so a sender who can't learns nothing about the receiver), both users still ACTIVE (a
+ * freeze after the pre-checks, or under a still-valid token), the customer's period limits, and
+ * the balance cap of a CUSTOMER receiver on its LOCKED balance. Every read uses `tx`.
  */
 export function makeTransferGuard(a: {
   type: FlowType;
   initiatorId: string;
   receiverId: string;
   limit: LimitRule | null;
+  /** The sender's wallet and what leaves it (−the from posting). */
+  senderWalletId: string;
+  debit: bigint;
   customerWalletId: string;
   receiverWalletId: string;
   /** The business amount: what the limits count. */
   amount: bigint;
   /** What the receiver's wallet gains: what the cap checks. */
   credit: bigint;
-  now: Date;
+  /** Tests only. Default: the app's clock when the guard runs (the clock that stamps created_at). */
+  now?: Date;
+  /** Preview only: an unlocked cap answer would let anyone probe the receiver's balance. */
+  skipCap?: boolean;
 }): Guard {
   return async ({ tx, wallets }) => {
+    // Present: every posting wallet is locked (or, in a preview, read). postTransaction's own
+    // balance check stays as the backstop.
+    const sender = wallets.get(a.senderWalletId)!;
+    if (sender.type !== 'SYSTEM_FLOAT' && sender.balance < a.debit) throw insufficientBalance();
+
     const users = await tx.user.findMany({
       where: { id: { in: [a.initiatorId, a.receiverId] } },
       select: { id: true, status: true },
@@ -70,17 +83,21 @@ export function makeTransferGuard(a: {
     if (initiatorStatus !== 'ACTIVE') throw accountNotActive(initiatorStatus);
     if (statusOf(a.receiverId) !== 'ACTIVE') throw receiverNotActive();
 
+    // Sampled here, under the locks, just before the insert, and from the app's clock: Prisma
+    // fills @default(now()) itself from that clock (not the DB's), so this is the day the row
+    // lands in. An earlier `now` could only widen the window (no upper bound), never narrow it.
+    const now = a.now ?? new Date();
     await checkPeriodLimits(tx, {
       type: a.type,
       limit: a.limit,
       customerWalletId: a.customerWalletId,
       side: FLOWS[a.type].limitSide,
       amount: a.amount,
-      now: a.now,
+      now,
     });
 
     const receiver = wallets.get(a.receiverWalletId)!; // present: every posting wallet is locked
-    if (receiver.type === 'CUSTOMER') {
+    if (!a.skipCap && receiver.type === 'CUSTOMER') {
       checkBalanceCap({
         receiverType: receiver.type,
         balance: receiver.balance,
@@ -126,28 +143,21 @@ async function prepare(req: TransferRequest) {
     { amount: req.amount, fee, commission },
   );
   const postingOf = (id: string) => postings.find((p) => p.walletId === id)!.amount;
+  const total = -postingOf(fromWalletId);
 
-  const guard = makeTransferGuard({
+  const guardArgs = {
     type: req.type,
     initiatorId: initiator.id,
     receiverId: receiver.id,
     limit: rules.limit,
+    senderWalletId: fromWalletId,
+    debit: total,
     customerWalletId: flow.limitSide === 'from' ? fromWalletId : toWalletId,
     receiverWalletId: toWalletId,
     amount: req.amount,
     credit: postingOf(toWalletId),
-    now: req.now ?? new Date(),
-  });
-  return {
-    initiator,
-    receiver,
-    fee,
-    postings,
-    fromWalletId,
-    toWalletId,
-    total: -postingOf(fromWalletId),
-    guard,
   };
+  return { initiator, receiver, fee, postings, fromWalletId, toWalletId, total, guardArgs };
 }
 
 /** What a transfer would cost and whether it would pass right now. Binding only in executeTransfer. */
@@ -155,15 +165,13 @@ export async function previewTransfer(req: TransferRequest): Promise<TransferPre
   const p = await prepare(req);
 
   // The guard's checks on plain reads, without locks: a parallel request can still change them.
+  // It starts with the sender's balance. No cap: only the real POST enforces it.
   const wallets = await prisma.wallet.findMany({
     where: { id: { in: p.postings.map((x) => x.walletId) } },
     select: { id: true, type: true, balance: true },
   });
-  await p.guard({ tx: prisma, wallets: new Map(wallets.map((w) => [w.id, w])) });
-  const sender = wallets.find((w) => w.id === p.fromWalletId)!;
-  if (sender.balance < p.total) {
-    throw new AppError(422, 'INSUFFICIENT_BALANCE', 'Insufficient balance');
-  }
+  const guard = makeTransferGuard({ ...p.guardArgs, skipCap: true });
+  await guard({ tx: prisma, wallets: new Map(wallets.map((w) => [w.id, w])) });
 
   return {
     type: req.type,
@@ -205,7 +213,7 @@ export async function executeTransfer(
     initiatedById: p.initiator.id,
     idempotencyKey: req.idempotencyKey,
     note: req.note,
-    guard: p.guard,
+    guard: makeTransferGuard(p.guardArgs),
   });
   const receipt = toReceipt(transaction, { from: p.initiator, to: p.receiver }, p.fromWalletId);
   return { receipt, replayed };
