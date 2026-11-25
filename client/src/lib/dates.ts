@@ -36,3 +36,11 @@ export function isCalendarDate(s: string): boolean {
   const d = new Date(s)
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s
 }
+
+const dhakaHour = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Dhaka', hour: 'numeric', hourCycle: 'h23' })
+
+/** The Home greeting for `now`, by the Dhaka clock: 05–11 morning, 12–16 afternoon, else evening. An i18n key under `home.greeting`. */
+export function greetingKey(now: Date): 'morning' | 'afternoon' | 'evening' {
+  const hour = Number(dhakaHour.format(now))
+  return hour >= 5 && hour < 12 ? 'morning' : hour >= 12 && hour < 17 ? 'afternoon' : 'evening'
+}

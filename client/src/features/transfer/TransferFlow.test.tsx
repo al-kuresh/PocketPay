@@ -1,7 +1,9 @@
-import { screen, within } from '@testing-library/react'
+import { act, screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import bn from '../../i18n/bn.json'
 import en from '../../i18n/en.json'
+import { useLanguage } from '../../stores/language'
 import { useSession } from '../../stores/session'
 import { renderPage, renderRoutes } from '../../test/render'
 import { apiError, server, testUser } from '../../test/server'
@@ -415,5 +417,124 @@ describe('TransferFlow drives Cash Out and Payment too', () => {
     const receipt = await screen.findByRole('region', { name: en.transfer.success })
     expect(within(receipt).getByText('Demo Store')).toBeInTheDocument()
     expect(posts.map((p) => p.path)).toEqual(['payment'])
+  })
+})
+
+describe('the amount screen: keypad, chips, fee from preview', () => {
+  const amountField = () => screen.getByLabelText(en.transfer.amount)
+  const key = (name: string) => screen.getByRole('button', { name })
+
+  /** Receiver typed and looked up: the amount screen is ready. */
+  async function toAmount(user: User) {
+    await user.type(receiverField(), '01800000003')
+    await screen.findByText('Karim H***')
+  }
+
+  async function next(user: User) {
+    await user.click(screen.getByRole('button', { name: en.transfer.next }))
+    await screen.findByText(en.transfer.total)
+  }
+
+  it('the keypad edits the amount; Next previews the poisha from takaToPoisha', async () => {
+    const { user } = await renderPage('/send-money')
+    await toAmount(user)
+    for (const k of ['1', '2', '5', '.', '5']) await user.click(key(k))
+    expect(amountField()).toHaveValue('125.5')
+    await next(user)
+    expect(previews).toEqual([{ type: 'SEND_MONEY', receiverPhone: '01800000003', amount: '12550' }])
+  })
+
+  it('a 3rd decimal is refused, and Delete takes off the last character', async () => {
+    const { user } = await renderPage('/send-money')
+    await toAmount(user)
+    for (const k of ['1', '.', '2', '3', '4']) await user.click(key(k))
+    expect(amountField()).toHaveValue('1.23')
+    await user.click(key(en.amount.delete))
+    expect(amountField()).toHaveValue('1.2')
+    await next(user)
+    expect(previews).toEqual([{ type: 'SEND_MONEY', receiverPhone: '01800000003', amount: '120' }])
+  })
+
+  it.each([
+    ['৳500', '50000'],
+    ['৳1,000', '100000'],
+    ['৳2,000', '200000'],
+  ])('the quick chip %s sets the amount (poisha %s), replacing what was typed', async (chip, poisha) => {
+    const { user } = await renderPage('/send-money')
+    await toAmount(user)
+    await user.click(key('7'))
+    await user.click(key(chip))
+    await next(user)
+    expect(previews).toEqual([{ type: 'SEND_MONEY', receiverPhone: '01800000003', amount: poisha }])
+  })
+
+  it('bn: the keys and the amount show Bangla digits; the poisha is the same', async () => {
+    act(() => useLanguage.getState().setLang('bn'))
+    try {
+      const { user } = await renderPage('/send-money')
+      await user.type(screen.getByLabelText(bn.flows.SEND_MONEY.receiver), '01800000003')
+      await screen.findByText('Karim H***')
+      for (const k of ['৫', '০', '০']) await user.click(key(k))
+      expect(screen.getByLabelText(bn.transfer.amount)).toHaveValue('৫০০')
+      expect(key('৳১,০০০')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: bn.transfer.next }))
+      await screen.findByText(bn.transfer.total)
+      expect(previews).toEqual([{ type: 'SEND_MONEY', receiverPhone: '01800000003', amount: '50000' }])
+    } finally {
+      act(() => useLanguage.getState().setLang('en'))
+    }
+  })
+
+  it('a physical keyboard still types into the amount, under the same rules', async () => {
+    const { user } = await renderPage('/send-money')
+    await toAmount(user)
+    await user.type(amountField(), '75x.505')
+    expect(amountField()).toHaveValue('75.50')
+    await user.type(amountField(), '{Backspace}{Backspace}')
+    expect(amountField()).toHaveValue('75.')
+    expect(screen.getByRole('button', { name: en.transfer.next })).toBeDisabled() // "75." is not an amount yet
+    await user.type(amountField(), '{Backspace}')
+    await next(user)
+    expect(previews).toEqual([{ type: 'SEND_MONEY', receiverPhone: '01800000003', amount: '7500' }])
+  })
+
+  it('the phone keyboard never opens for the amount (inputmode none)', async () => {
+    await renderPage('/send-money')
+    expect(amountField()).toHaveAttribute('inputmode', 'none')
+  })
+
+  it('the fee line comes from preview, and Next reuses that same preview', async () => {
+    const { user } = await renderPage('/send-money')
+    await toAmount(user)
+    expect(screen.queryByText(/Fee ৳/)).not.toBeInTheDocument()
+    await user.click(key('৳500'))
+    expect(await screen.findByText('Fee ৳5.00')).toBeInTheDocument()
+    expect(previews).toEqual([{ type: 'SEND_MONEY', receiverPhone: '01800000003', amount: '50000' }])
+    await next(user)
+    expect(previews).toHaveLength(1) // one preview for the fee line and Next: they share the moneyLimiter budget with the POST
+  })
+
+  it('a zero fee from preview reads "No fee"', async () => {
+    server.use(
+      http.post('/api/v1/transactions/preview', async ({ request }) => {
+        const body = (await request.json()) as { type: string; receiverPhone: string; amount: string }
+        const receiver = { phone: body.receiverPhone, ...PEOPLE[body.receiverPhone] }
+        return HttpResponse.json({ success: true, data: { ...body, fee: '0', total: body.amount, receiver } })
+      }),
+    )
+    const { user } = await renderPage('/send-money')
+    await toAmount(user)
+    await user.click(key('৳500'))
+    expect(await screen.findByText(en.transfer.noFee)).toBeInTheDocument()
+  })
+
+  it('the receiver card shows the looked-up name and number; Change clears it for a new number', async () => {
+    const { user } = await renderPage('/send-money')
+    await toAmount(user)
+    expect(receiverField()).toHaveValue('01800000003')
+    await user.click(screen.getByRole('button', { name: en.transfer.change }))
+    expect(screen.queryByText('Karim H***')).not.toBeInTheDocument()
+    expect(receiverField()).toHaveValue('')
+    expect(receiverField()).toHaveFocus()
   })
 })

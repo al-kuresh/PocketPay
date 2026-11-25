@@ -1,6 +1,6 @@
 import { screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PublicUser } from '../../api/types'
 import en from '../../i18n/en.json'
 import { useSession } from '../../stores/session'
@@ -53,6 +53,36 @@ beforeEach(() => {
 })
 
 describe('customer Home', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('greets by the Dhaka time of day, with the initials avatar and the name; the page heading stays "Home"', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-25T13:00:00Z') }) // 19:00 in Dhaka
+    signIn({ name: 'Rahim Uddin' })
+    renderRoutes('/')
+    expect(await screen.findByText(en.home.greeting.evening)).toBeInTheDocument()
+    expect(screen.getByText('Rahim Uddin')).toBeInTheDocument()
+    expect(screen.getByText('RU')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: en.nav.home })).toBeInTheDocument()
+  })
+
+  it('the balance sits in the stitched pocket (the Kantha running stitch, decorative)', async () => {
+    signIn()
+    renderRoutes('/')
+    const pocket = await screen.findByRole('button', { name: en.home.showBalance })
+    const stitch = pocket.querySelector('svg[aria-hidden="true"] rect')
+    expect(stitch).toHaveAttribute('stroke-dasharray', '7 9')
+    expect(stitch).toHaveAttribute('stroke-linecap', 'round')
+  })
+
+  it('recent rows: initials tinted by direction, amounts in the display face', async () => {
+    signIn()
+    renderRoutes('/')
+    const out = await screen.findByText('−৳505.00')
+    expect(out).toHaveClass('font-display')
+    expect(screen.getByText('KH')).toHaveClass('bg-primary-50') // money out: Karim H***
+    expect(screen.getByText('DA')).toHaveClass('bg-success-50') // money in: Demo A***
+  })
+
   it('hides the balance until tapped', async () => {
     signIn()
     const { user } = renderRoutes('/')

@@ -7,9 +7,10 @@ import { ApiError } from '../../api/client'
 import { lookup, preview as fetchPreview, transfer } from '../../api/transactions'
 import type { Party, Preview, Receipt, TxType } from '../../api/types'
 import { AppShell } from '../../components/layout/AppShell'
-import { AmountInput } from '../../components/ui/AmountInput'
+import { AmountChips, AmountField, AmountKeypad } from '../../components/ui/AmountKeypad'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
+import { Initials } from '../../components/ui/Initials'
 import { Input } from '../../components/ui/Input'
 import { PhoneInput } from '../../components/ui/PhoneInput'
 import { PinInput, type PinInputHandle } from '../../components/ui/PinInput'
@@ -17,7 +18,7 @@ import { useToast } from '../../components/ui/toast-context'
 import { errorMessage } from '../../i18n/errors'
 import { copyText } from '../../lib/clipboard'
 import { formatDateTime } from '../../lib/dates'
-import { formatTaka } from '../../lib/money'
+import { formatTaka, takaToPoisha } from '../../lib/money'
 import { phoneSchema } from '../../lib/validation'
 import { useLanguage, type Lang } from '../../stores/language'
 import { FLOWS, type Flow } from './flows'
@@ -42,7 +43,21 @@ const BACK_TO_PREVIEW = new Set([
 ])
 
 const LOOKUP_DELAY_MS = 300
+// The fee line's preview waits for the amount to settle and is reused by Next for a minute: previews share the
+// money POSTs' rate-limit budget (30 a minute per user), so fiddling with the amount must not use it up.
+const QUOTE_DELAY_MS = 500
+const QUOTE_FRESH_MS = 60_000
 const PIN_LENGTH = 5
+
+/** `value`, once it has stopped changing for `ms`. */
+function useSettled<T>(value: T, ms: number) {
+  const [settled, setSettled] = useState(value)
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(value), ms)
+    return () => clearTimeout(timer)
+  }, [value, ms])
+  return settled
+}
 
 /** A v4 UUID. Not crypto.randomUUID: that exists only in secure contexts, and dev:phone is plain http on a LAN IP. */
 function uuidV4() {
@@ -133,16 +148,16 @@ interface EnterStepProps {
   onNext(preview: Preview): void
 }
 
-/** The receiver (looked up once typing stops), the amount, an optional note. */
+/** The receiver (looked up once typing stops, then shown as a card), the amount on the keypad with its fee, an optional note. */
 function EnterStep({ type, flow, details, onChange, onNext }: EnterStepProps) {
   const { t } = useTranslation()
+  const lang = useLanguage((s) => s.lang)
+  const queryClient = useQueryClient()
+  const amountField = useRef<HTMLInputElement>(null)
+  const [changing, setChanging] = useState(false)
   const parsed = phoneSchema.safeParse(details.phone)
   const phone = parsed.success ? parsed.data : null
-  const [settled, setSettled] = useState(phone)
-  useEffect(() => {
-    const timer = setTimeout(() => setSettled(phone), LOOKUP_DELAY_MS)
-    return () => clearTimeout(timer)
-  }, [phone])
+  const settled = useSettled(phone, LOOKUP_DELAY_MS)
 
   const ready = phone !== null && settled === phone
   const who = useQuery({ queryKey: ['lookup', settled], queryFn: () => lookup(settled ?? ''), enabled: ready })
@@ -157,44 +172,88 @@ function EnterStep({ type, flow, details, onChange, onNext }: EnterStepProps) {
           ? t(`transfer.wrongRole.${flow.receiver}`)
           : undefined
 
-  const check = useMutation({ mutationFn: fetchPreview, onSuccess: onNext })
-  const canNext = receiver !== undefined && !wrongRole && details.poisha !== null
+  const found = receiver !== undefined && !wrongRole
+
+  // The fee line and Next share one preview (same key): the fee is the server's, never worked out here.
+  const quote = {
+    queryKey: ['preview', type, phone, details.poisha],
+    queryFn: () => fetchPreview({ type, receiverPhone: phone ?? '', amount: details.poisha ?? '' }),
+    staleTime: QUOTE_FRESH_MS,
+  }
+  const settledPoisha = useSettled(details.poisha, QUOTE_DELAY_MS)
+  const fee = useQuery({ ...quote, enabled: found && details.poisha !== null && settledPoisha === details.poisha }).data?.fee
+  const check = useMutation({ mutationFn: () => queryClient.fetchQuery(quote), onSuccess: onNext })
+  const canNext = found && details.poisha !== null
+
+  // The card replaces the number field when the lookup lands, which drops focus: put it on the amount, not the page.
+  useEffect(() => {
+    if (found && document.activeElement === document.body) amountField.current?.focus()
+  }, [found])
+
+  function setAmount(text: string) {
+    onChange({ amountText: text, poisha: takaToPoisha(text) })
+  }
 
   function submit(e: FormEvent) {
     e.preventDefault()
-    if (canNext && phone && details.poisha) check.mutate({ type, receiverPhone: phone, amount: details.poisha })
+    if (canNext) check.mutate()
   }
 
   return (
     <form onSubmit={submit} noValidate className="flex flex-1 flex-col gap-6">
-      <div className="flex flex-col gap-2">
+      {!found && (
         <PhoneInput
           label={t(`flows.${type}.receiver`)}
           value={details.phone}
           onChange={(e) => onChange({ phone: e.target.value })}
           error={phoneError}
+          autoFocus={changing}
         />
-        <p aria-live="polite" className="flex items-baseline gap-2 text-sm">
-          {receiver && !wrongRole && (
-            <>
-              <span className="font-semibold text-text">{receiver.name}</span>
-              <span className="text-text-muted">{t(`roles.${receiver.role}`)}</span>
-            </>
-          )}
-        </p>
+      )}
+      <div aria-live="polite">
+        {found && (
+          <div className="flex items-center gap-3 rounded-3xl border border-border p-4">
+            <Initials name={receiver.name} />
+            <div className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-base font-semibold text-text">{receiver.name}</span>
+              {/* Still the receiver field, read-only, so the number keeps its label for screen readers (and Back). */}
+              <input
+                readOnly
+                tabIndex={-1}
+                aria-label={t(`flows.${type}.receiver`)}
+                value={details.phone}
+                className="min-w-0 bg-transparent text-sm tabular-nums text-text-muted"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setChanging(true)
+                onChange({ phone: '' })
+              }}
+              className="min-h-11 rounded-xl px-2 text-sm font-semibold text-primary-dark hover:bg-primary-50"
+            >
+              {t('transfer.change')}
+            </button>
+          </div>
+        )}
       </div>
-      <AmountInput
-        label={t('transfer.amount')}
-        defaultValue={details.amountText}
-        onAmountChange={({ text, poisha }) => onChange({ amountText: text, poisha })}
-      />
+      <div className="flex flex-col items-center gap-3">
+        <AmountField ref={amountField} label={t('transfer.amount')} text={details.amountText} onTextChange={setAmount} />
+        <p aria-live="polite" className="min-h-6 text-sm text-text-muted">
+          {fee !== undefined &&
+            (fee === '0' ? t('transfer.noFee') : t('transfer.feeLine', { fee: formatTaka(fee, { lang }) }))}
+        </p>
+        <AmountChips onTextChange={setAmount} />
+      </div>
       <Input label={t('transfer.note')} value={details.note} maxLength={50} onChange={(e) => onChange({ note: e.target.value })} />
       {check.isError && (
         <p role="alert" className="text-sm text-danger">
           {errorMessage(t, check.error)}
         </p>
       )}
-      <div className="mt-auto">
+      <div className="mt-auto flex flex-col gap-4">
+        <AmountKeypad text={details.amountText} onTextChange={setAmount} />
         <Button type="submit" disabled={!canNext} loading={check.isPending}>
           {t('transfer.next')}
           {!check.isPending && <ArrowRight aria-hidden className="size-5" />}

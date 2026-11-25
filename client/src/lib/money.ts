@@ -28,3 +28,13 @@ export function takaToPoisha(input: string): string | null {
   const poisha = BigInt(m[1]) * 100n + BigInt((m[2] ?? '').padEnd(2, '0'))
   return poisha > 0n ? poisha.toString() : null
 }
+
+/**
+ * The amount as the keypad or a keyboard leaves it: `next` is what the user tried to make of `text`. Kept as ASCII
+ * digits with at most 7 before the point (৳99,99,999 is past every limit and still fits the 64px amount) and 2 after.
+ * Anything else (a 3rd decimal, a 2nd point, a letter, a sign) keeps the old `text`. Only takaToPoisha reads the result.
+ */
+export function editAmount(text: string, next: string): string {
+  const clean = toAsciiDigits(next).replaceAll(',', '').replace(/^\./, '0.').replace(/^0+(?=\d)/, '')
+  return /^\d{0,7}(\.\d{0,2})?$/.test(clean) ? clean : text
+}

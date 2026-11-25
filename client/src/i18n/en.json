@@ -52,7 +52,9 @@
     "profile": "Profile"
   },
   "amount": {
-    "invalid": "Enter an amount like 500 or 1,500.50."
+    "invalid": "Enter an amount like 500 or 1,500.50.",
+    "keypad": "Amount keypad",
+    "delete": "Delete"
   },
   "imagePicker": {
     "choose": "Take or choose a photo",
@@ -194,12 +196,17 @@
   },
   "home": {
     "balance": "Balance",
-    "showBalance": "Show balance",
+    "showBalance": "Tap to see balance",
     "recent": "Recent transactions",
     "seeAll": "See all",
     "empty": "No transactions yet",
     "emptyBody": "Money you send or receive shows up here.",
-    "eMoney": "E-money balance"
+    "eMoney": "E-money balance",
+    "greeting": {
+      "morning": "Good morning",
+      "afternoon": "Good afternoon",
+      "evening": "Good evening"
+    }
   },
   "transfer": {
     "amount": "Amount",
@@ -225,7 +232,10 @@
     "share": "Share",
     "copied": "TrxID copied.",
     "copyByHand": "Copy it by hand: {{trxId}}",
-    "shareText": "PocketPay TrxID: {{trxId}}"
+    "shareText": "PocketPay TrxID: {{trxId}}",
+    "change": "Change",
+    "feeLine": "Fee {{fee}}",
+    "noFee": "No fee"
   },
   "history": {
     "type": "Type",

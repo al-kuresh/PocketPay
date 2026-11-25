@@ -52,7 +52,9 @@
     "profile": "প্রোফাইল"
   },
   "amount": {
-    "invalid": "৫০০ বা ১,৫০০.৫০ এভাবে টাকার পরিমাণ লিখুন।"
+    "invalid": "৫০০ বা ১,৫০০.৫০ এভাবে টাকার পরিমাণ লিখুন।",
+    "keypad": "টাকার কীপ্যাড",
+    "delete": "মুছুন"
   },
   "imagePicker": {
     "choose": "ছবি তুলুন বা বেছে নিন",
@@ -194,12 +196,17 @@
   },
   "home": {
     "balance": "ব্যালেন্স",
-    "showBalance": "ব্যালেন্স দেখুন",
+    "showBalance": "ব্যালেন্স দেখতে ট্যাপ করুন",
     "recent": "সাম্প্রতিক লেনদেন",
     "seeAll": "সব দেখুন",
     "empty": "এখনো কোনো লেনদেন নেই",
     "emptyBody": "আপনি টাকা পাঠালে বা পেলে তা এখানে দেখা যাবে।",
-    "eMoney": "ই-মানি ব্যালেন্স"
+    "eMoney": "ই-মানি ব্যালেন্স",
+    "greeting": {
+      "morning": "শুভ সকাল",
+      "afternoon": "শুভ অপরাহ্ন",
+      "evening": "শুভ সন্ধ্যা"
+    }
   },
   "transfer": {
     "amount": "টাকার পরিমাণ",
@@ -225,7 +232,10 @@
     "share": "শেয়ার করুন",
     "copied": "TrxID কপি করা হয়েছে।",
     "copyByHand": "নিজে কপি করুন: {{trxId}}",
-    "shareText": "PocketPay TrxID: {{trxId}}"
+    "shareText": "PocketPay TrxID: {{trxId}}",
+    "change": "পরিবর্তন",
+    "feeLine": "চার্জ {{fee}}",
+    "noFee": "কোনো চার্জ নেই"
   },
   "history": {
     "type": "লেনদেনের ধরন",

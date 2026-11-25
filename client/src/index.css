@@ -32,6 +32,7 @@
      only 3.3:1 and 3.2:1 on white, which fails AA for small text. */
   --color-success: #16A34A;
   --color-success-dark: #15803D; /* 5.0:1 on white */
+  --color-success-50: #DCFCE7; /* money-in initials chips: success-dark text on it is 4.6:1 */
   --color-danger: #DC2626; /* 4.8:1 on white, fine as text */
   --color-warning: #D97706;
   --color-warning-dark: #B45309; /* 5.0:1 on white */
