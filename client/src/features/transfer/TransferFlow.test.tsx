@@ -11,6 +11,8 @@ type FlowPath = 'send-money' | 'cash-out' | 'payment'
 
 // design-ok: a UUID regex, not a CSS class
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+// design-ok: a UUID regex (version 4 and the RFC variant: the server's z.uuid() checks both), not a CSS class
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const RAHIM = { name: 'Rahim U***', phone: '01800000002', role: 'CUSTOMER' }
 const PEOPLE: Record<string, { name: string; role: string }> = {
   '01800000003': { name: 'Karim H***', role: 'CUSTOMER' },
@@ -146,6 +148,21 @@ describe('TransferFlow: Send Money', () => {
 
     await user.click(screen.getByRole('button', { name: en.transfer.done }))
     expect(router.state.location.pathname).toBe('/')
+  })
+
+  it('plain http on a LAN IP (dev:phone): no crypto.randomUUID, the PIN step still opens and the POST has a UUID key', async () => {
+    // Not a secure context: browsers only expose getRandomValues there.
+    vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) })
+    try {
+      const { user } = await renderPage('/send-money')
+      await enterDetails(user)
+      await confirmPreview(user)
+      await submitPin(user)
+      expect(await screen.findByText('PP7K2M9QXA')).toBeInTheDocument()
+      expect(posts[0].key).toMatch(UUID_V4)
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('Review focus #2: a network error, then "Try again" → the SAME key, and the (replayed) receipt shows', async () => {
