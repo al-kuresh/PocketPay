@@ -35,7 +35,7 @@ export async function verifyPinWithLockout(
   opts: {
     meta: { ip?: string };
     wrongPin: (attemptsLeft: number) => AppError;
-    failedAction: 'LOGIN_FAILED' | 'TRANSACTION_PIN_FAILED';
+    failedAction: 'LOGIN_FAILED' | 'TRANSACTION_PIN_FAILED' | 'PIN_CHANGE_FAILED';
   },
 ): Promise<void> {
   // One user's checks wait their turn in memory, not in Postgres: a waiting request holds no

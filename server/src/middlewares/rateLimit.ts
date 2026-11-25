@@ -43,5 +43,12 @@ const byUser = (req: Request) => req.user!.id;
 /** The 4 money POSTs and preview: 30 per minute per user, one budget shared by all five. */
 export const moneyLimiter = createLimiter({ windowMs: MINUTE, limit: 30, keyGenerator: byUser });
 
+/** PATCH /auth/pin: 5 per 15 minutes per user (on top of the 3-strike PIN lockout). */
+export const pinChangeLimiter = createLimiter({
+  windowMs: 15 * MINUTE,
+  limit: 5,
+  keyGenerator: byUser,
+});
+
 /** GET /wallets/lookup: 30 per minute per user, to slow down phone-number enumeration. */
 export const lookupLimiter = createLimiter({ windowMs: MINUTE, limit: 30, keyGenerator: byUser });

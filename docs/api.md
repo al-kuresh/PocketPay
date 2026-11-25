@@ -1,6 +1,6 @@
 # PocketPay API (v1)
 
-Auth, registration and sessions; wallets, money flows, history and receipts.
+Auth, registration and sessions; change PIN and profile photo; wallets, money flows, history and receipts.
 
 Base URL: `http://localhost:4000/api/v1` in local dev. Every example uses **fake data**
 (phone `01700000000`, NID `1234567890`). Never send a real NID to a demo server.
@@ -36,10 +36,11 @@ gets `401 UNAUTHENTICATED`.
 |---|---|---|
 | `POST /auth/register/request-otp` | 5 per 15 minutes | client IP |
 | `POST /auth/login` | 10 per 15 minutes | client IP |
+| `PATCH /auth/pin` | 5 per 15 minutes | **user** |
 | the 4 money POSTs + `POST /transactions/preview` | 30 per minute, one budget for all five | **user** |
 | `GET /wallets/lookup` | 30 per minute | **user** |
 
-The money and lookup limits count per signed-in user, not per IP: on Bangladeshi mobile
+The PIN-change, money and lookup limits count per signed-in user, not per IP: on Bangladeshi mobile
 networks many phones share one IP (CGNAT).
 
 Over the limit: `429 RATE_LIMITED`.
@@ -252,6 +253,68 @@ Login, refresh and registration responses don't include the wallet.
 | Error | When |
 |---|---|
 | `401 UNAUTHENTICATED` | missing, expired or invalid access token (a registration token counts as invalid) |
+
+---
+
+## Account
+
+### `PATCH /auth/pin`
+
+Changes the PIN. **Auth:** `Authorization: Bearer <accessToken>`, plus the `pp_rt` cookie,
+which the browser sends here on its own. **Rate limit:** 5 / 15 min per user.
+
+```json
+{ "currentPin": "48213", "newPin": "73915" }
+```
+
+| Field | Rules |
+|---|---|
+| `currentPin` | 5 digits; checked against the stored PIN under the **same 3-strike lockout as login and money** |
+| `newPin` | 5 digits; not one digit repeated (`11111`) and not a run (`12345`, `54321`); different from the current PIN |
+
+**204** (no body). **Every other session of the user is logged out** (their refresh tokens are
+revoked, so their next refresh gets `401 REFRESH_TOKEN_INVALID`). The caller's own session,
+identified by the `pp_rt` cookie, keeps working. With no cookie, every session ends. Other
+devices' access tokens stay valid until they expire (15 min).
+
+| Error | When |
+|---|---|
+| `400 VALIDATION_ERROR` | a PIN isn't 5 digits, or the new PIN is weak (`details: [{ path, message }]`) |
+| `401 UNAUTHENTICATED` | missing, expired or invalid access token |
+| `403 INVALID_PIN` | wrong current PIN. `details: { attemptsLeft }`. This counts toward the lockout shared with login and money |
+| `423 ACCOUNT_LOCKED` | 3 wrong PINs (here, at login or on a money request) lock the account for 30 minutes, **even for the right PIN**. `details: { lockedUntil }` |
+| `422 PIN_UNCHANGED` | the new PIN is the same as the current one. Nothing changed and no session was logged out |
+| `429 RATE_LIMITED` | more than 5 changes in 15 minutes |
+
+### `PUT /me/photo`
+
+Replaces the public profile photo. **Auth:** `Authorization: Bearer <accessToken>`, checked
+**before** the upload is read. **Body:** `multipart/form-data` with one file field, `photo`:
+JPEG, PNG or WebP (checked by content, not file name), max 2 MB.
+
+```bash
+curl -X PUT http://localhost:4000/api/v1/me/photo \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -F photo=@me.jpg
+```
+
+**200**
+
+```json
+{ "success": true, "data": { "user": { "…PublicUser…": "", "profilePhotoUrl": "https://…/profile/….webp" } } }
+```
+
+The photo is turned upright, re-encoded to a 512×512 WebP with EXIF/GPS stripped, and stored
+publicly at a **new URL** (so caches never show the old one). The old photo is deleted. The
+private NID and selfie images are never changed.
+
+| Error | When |
+|---|---|
+| `401 UNAUTHENTICATED` | missing, expired or invalid access token |
+| `400 MISSING_FILE` | no `photo` file. `details: { field: "photo" }` |
+| `400 VALIDATION_ERROR` | malformed upload: another file field, more than one file, or a text field (`details: { field, reason }`) |
+| `413 FILE_TOO_LARGE` | over 2 MB |
+| `415 UNSUPPORTED_FILE_TYPE` | not JPEG/PNG/WebP (e.g. a PDF renamed `.jpg`), damaged, or over 50 megapixels |
+| `502 UPLOAD_FAILED` | the photo couldn't be stored. Nothing changed; retrying is safe |
 
 ---
 
@@ -511,6 +574,8 @@ Every code the auth endpoints return:
 | `UNSUPPORTED_FILE_TYPE` | 415 | | with a JPEG, PNG or WebP |
 | `INVALID_CREDENTIALS` | 401 | `{ attemptsLeft }` for a wrong PIN | with the right PIN |
 | `ACCOUNT_LOCKED` | 423 | `{ lockedUntil }` | after `lockedUntil` |
+| `INVALID_PIN` | 403 | `{ attemptsLeft }` | `PATCH /auth/pin`: with the right current PIN |
+| `PIN_UNCHANGED` | 422 | | `PATCH /auth/pin`: with a different new PIN |
 | `ACCOUNT_FROZEN` | 403 | | no: contact support |
 | `UNAUTHENTICATED` | 401 | | refresh, then retry |
 | `FORBIDDEN` | 403 | | no |
@@ -558,6 +623,5 @@ Planned in [design.md §9](design.md#9-api-v1), not implemented yet:
 
 | Group | Endpoints | Phase |
 |---|---|---|
-| Account | `PATCH /auth/pin` (change PIN), `PUT /me/photo` (replace profile photo) | 6 (with the Profile screen) |
 | KYC | `GET /kyc`, `POST /kyc/resubmit` | 7 |
 | Admin | `/admin/stats`, `/admin/users`, `/admin/kyc`, `/admin/transactions`, `/admin/agents/:id/float`, `/admin/fees`, `/admin/limits`, `/admin/reconcile`, `/admin/audit-logs` | 7 |
