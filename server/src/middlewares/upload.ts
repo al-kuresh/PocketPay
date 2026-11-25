@@ -2,7 +2,7 @@ import type { RequestHandler } from 'express';
 import multer from 'multer';
 import { AppError } from '../utils/AppError';
 
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 /** Runs a multer handler and turns its errors into API errors (413 for size, 400 otherwise). */
 const withUploadErrors =
@@ -12,7 +12,7 @@ const withUploadErrors =
       if (err instanceof multer.MulterError) {
         next(
           err.code === 'LIMIT_FILE_SIZE'
-            ? new AppError(413, 'FILE_TOO_LARGE', 'Each image must be 2 MB or smaller')
+            ? new AppError(413, 'FILE_TOO_LARGE', 'Each image must be 10 MB or smaller')
             : // Too many files, unknown field name, etc.: the client sent a malformed upload.
               new AppError(400, 'VALIDATION_ERROR', 'Invalid upload', {
                 field: err.field,

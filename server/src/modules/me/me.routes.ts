@@ -32,7 +32,7 @@ export function createMeRouter(deps: { storage: StorageProvider }): Router {
   });
 
   // PUT /api/v1/me/photo → a new public profile photo. Token first: strangers are rejected
-  // before multer buffers up to 2 MB.
+  // before multer buffers up to 10 MB.
   router.put('/photo', requireAuth, uploadProfilePhoto, async (req, res) => {
     if (!req.file) {
       throw new AppError(400, 'MISSING_FILE', 'Please upload the photo image', { field: 'photo' });

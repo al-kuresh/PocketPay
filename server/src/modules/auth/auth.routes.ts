@@ -30,7 +30,7 @@ export function createAuthRouter(deps: AuthDeps): Router {
     auth.requestOtp,
   );
   router.post('/register/verify-otp', validateBody(verifyOtpBody), auth.verifyOtp);
-  // Token first: a cheap check that rejects strangers before multer buffers up to 3 × 2 MB.
+  // Token first: a cheap check that rejects strangers before multer buffers up to 3 × 10 MB.
   router.post(
     '/register/complete',
     requireRegistrationToken,

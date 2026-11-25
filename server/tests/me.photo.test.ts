@@ -7,7 +7,7 @@ import { prisma } from '../src/lib/prisma';
 import { MemoryStorage } from '../src/lib/storage/memory';
 import { createActor } from './helpers/actors';
 import { resetDb } from './helpers/db';
-import { isWebp, testJpeg } from './helpers/images';
+import { bigPng, isWebp, testJpeg } from './helpers/images';
 
 let storage: MemoryStorage;
 let app: ReturnType<typeof createApp>;
@@ -159,8 +159,18 @@ describe('PUT /me/photo', () => {
     expect(storage.objects.size).toBe(4);
   });
 
-  it('rejects a 3 MB file with 413 FILE_TOO_LARGE', async () => {
-    const res = await putPhoto(Buffer.alloc(3 * 1024 * 1024));
+  it('accepts a 9 MB image (the limit is 10 MB)', async () => {
+    const png = await bigPng();
+    expect(png.length).toBeGreaterThan(9 * 1024 * 1024);
+
+    const res = await putPhoto(png, token, 'me.png');
+
+    expect(res.status).toBe(200);
+    expect(await profileKey()).not.toBe(oldKey);
+  });
+
+  it('rejects an 11 MB file with 413 FILE_TOO_LARGE', async () => {
+    const res = await putPhoto(Buffer.alloc(11 * 1024 * 1024));
 
     expect(res.status).toBe(413);
     expect(res.body.error.code).toBe('FILE_TOO_LARGE');
@@ -174,8 +184,8 @@ describe('PUT /me/photo', () => {
   });
 
   it('no token → 401 before the upload is read', async () => {
-    // A 3 MB file would be 413 if the upload were parsed first.
-    const res = await putPhoto(Buffer.alloc(3 * 1024 * 1024), null);
+    // An 11 MB file would be 413 if the upload were parsed first.
+    const res = await putPhoto(Buffer.alloc(11 * 1024 * 1024), null);
 
     expect(res.status).toBe(401);
     expect(res.body.error.code).toBe('UNAUTHENTICATED');
