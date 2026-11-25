@@ -1,21 +1,29 @@
 import { useTranslation } from 'react-i18next'
-import { MobileShell } from '../components/layout/MobileShell'
+import { AppShell } from '../components/layout/AppShell'
+import { StatusBanner } from '../components/ui/StatusBanner'
+import { ComingSoon } from '../pages/admin/ComingSoon'
 import { useSession } from '../stores/session'
 
-// shortcut: placeholder pages until Tasks 5-8 build the real screens.
+// shortcut: placeholder pages until Tasks 6-8 build the real screens.
 export function Page({ titleKey }: { titleKey: string }) {
   const { t } = useTranslation()
   return (
-    <MobileShell>
-      <main className="p-6">
-        <h1 className="text-xl font-semibold text-text">{t(titleKey)}</h1>
-      </main>
-    </MobileShell>
+    <AppShell title={t(titleKey)}>
+      <span />
+    </AppShell>
   )
 }
 
-/** `/` is every role's home; it shows the page for the signed-in role. */
+/** `/` is every role's home. A PENDING_KYC or REJECTED user sees their status banner; an admin sees the Phase 7 page. */
 export function Home() {
-  const role = useSession((s) => s.user?.role)
-  return role ? <Page titleKey={`placeholder.home.${role}`} /> : null
+  const { t } = useTranslation()
+  const user = useSession((s) => s.user)
+  if (!user) return null
+  if (user.role === 'ADMIN') return <ComingSoon />
+  return (
+    <AppShell title={t(`placeholder.home.${user.role}`)}>
+      {user.status === 'PENDING_KYC' && <StatusBanner kind="PENDING_KYC" />}
+      {user.status === 'REJECTED' && <StatusBanner kind="REJECTED" />}
+    </AppShell>
+  )
 }

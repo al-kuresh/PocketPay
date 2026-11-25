@@ -44,3 +44,16 @@ export interface ErrorBody {
   success: false
   error: { code: string; message: string; details?: unknown }
 }
+
+/** POST /auth/register/request-otp. `devOtp` only when the server echoes codes (dev and demo: no SMS gateway). */
+export interface OtpSent {
+  expiresInSeconds: number
+  resendInSeconds: number
+  devOtp?: string
+}
+
+/** POST /auth/register/verify-otp. */
+export interface OtpVerified {
+  registrationToken: string
+  expiresInSeconds: number
+}

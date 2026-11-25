@@ -62,4 +62,23 @@ describe('route guards', () => {
     expect(await screen.findByRole('heading', { name: 'Agent home' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/')
   })
+
+  it('a signed-in user who opens /login → their home', async () => {
+    signIn({ role: 'AGENT', status: 'ACTIVE' })
+    const router = visit('/login')
+    expect(await screen.findByRole('heading', { name: 'Agent home' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/')
+  })
+
+  it('a signed-in user who opens /register → their home', async () => {
+    signIn({ role: 'CUSTOMER', status: 'ACTIVE' })
+    const router = visit('/register')
+    expect(await screen.findByRole('heading', { name: 'Customer home' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/')
+  })
+
+  it('/login waits for the session restore (no flash of the form)', () => {
+    visit('/login')
+    expect(screen.queryByRole('heading')).not.toBeInTheDocument()
+  })
 })

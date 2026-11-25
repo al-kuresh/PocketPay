@@ -63,4 +63,50 @@ describe('error codes', () => {
     expect(errorMessage(t, 'string')).toBe(en.errors.GENERIC)
     expect(errorMessage(t, undefined)).toBe(en.errors.GENERIC)
   })
+
+  it('codes with attemptsLeft have plural keys in both files', () => {
+    for (const code of ['INVALID_CREDENTIALS', 'INVALID_PIN', 'OTP_INVALID']) {
+      for (const file of [en.errors, bn.errors]) {
+        expect(file, code).toHaveProperty([`${code}_attempts_one`])
+        expect(file, code).toHaveProperty([`${code}_attempts_other`])
+      }
+    }
+  })
+
+  it('INVALID_CREDENTIALS with attemptsLeft says how many are left (plural, Bangla digits in bn)', () => {
+    const err = (n: number) => new ApiError(401, 'INVALID_CREDENTIALS', 'x', { attemptsLeft: n })
+    expect(errorMessage(t, err(2))).toBe(en.errors.INVALID_CREDENTIALS_attempts_other.replace('{{count, number}}', '2'))
+    expect(errorMessage(t, err(1))).toBe(en.errors.INVALID_CREDENTIALS_attempts_one.replace('{{count, number}}', '1'))
+    const inBangla = errorMessage(i18n.getFixedT('bn'), err(2))
+    expect(inBangla).toContain('২')
+    expect(inBangla).not.toMatch(/[0-9]/)
+  })
+
+  it('INVALID_PIN and OTP_INVALID with attemptsLeft say it too', () => {
+    expect(errorMessage(t, new ApiError(403, 'INVALID_PIN', 'x', { attemptsLeft: 2 }))).toContain('2')
+    expect(errorMessage(t, new ApiError(400, 'OTP_INVALID', 'x', { attemptsLeft: 4 }))).toContain('4')
+  })
+
+  it('INVALID_CREDENTIALS without details (unknown phone) → the plain message', () => {
+    expect(errorMessage(t, new ApiError(401, 'INVALID_CREDENTIALS', 'x'))).toBe(en.errors.INVALID_CREDENTIALS)
+  })
+
+  it('ACCOUNT_LOCKED with lockedUntil → the unlock time in Dhaka, in the language of t', () => {
+    const err = new ApiError(423, 'ACCOUNT_LOCKED', 'x', { lockedUntil: '2026-11-24T18:30:00Z' })
+    expect(errorMessage(t, err)).toContain('25 Nov 2026, 12:30 am')
+    expect(errorMessage(i18n.getFixedT('bn'), err)).toContain('২৫ নভে, ২০২৬, ১২:৩০ AM')
+    expect(errorMessage(t, new ApiError(423, 'ACCOUNT_LOCKED', 'x'))).toBe(en.errors.ACCOUNT_LOCKED)
+  })
+
+  it('details of the wrong shape are ignored (no "{{count}}" or "Invalid Date" leaks)', () => {
+    const odd = [
+      new ApiError(401, 'INVALID_CREDENTIALS', 'x', { attemptsLeft: '2' }),
+      new ApiError(423, 'ACCOUNT_LOCKED', 'x', { lockedUntil: 'soon' }),
+      new ApiError(400, 'VALIDATION_ERROR', 'x', [{ path: 'phone', message: 'bad' }]),
+    ]
+    for (const err of odd) {
+      const msg = errorMessage(t, err)
+      expect(msg).toBe(en.errors[err.code as keyof typeof en.errors])
+    }
+  })
 })

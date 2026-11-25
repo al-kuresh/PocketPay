@@ -54,7 +54,22 @@ export const ERROR_CODES = [
 
 const KNOWN = new Set<string>(ERROR_CODES)
 
-/** The translated text for a failed call. Never the server's `message`: an unknown code or a non-ApiError is GENERIC. */
+/** Codes whose `details.attemptsLeft` the message shows (key `errors.<CODE>_attempts`, plural). */
+const WITH_ATTEMPTS = new Set(['INVALID_CREDENTIALS', 'INVALID_PIN', 'OTP_INVALID'])
+
+/**
+ * The translated text for a failed call. Never the server's `message`: an unknown code or a non-ApiError is GENERIC.
+ * Known details are included: attempts left, and the unlock time (Dhaka, in t's language). Odd details are ignored.
+ */
 export function errorMessage(t: TFunction, err: unknown): string {
-  return t(err instanceof ApiError && KNOWN.has(err.code) ? `errors.${err.code}` : 'errors.GENERIC')
+  if (!(err instanceof ApiError) || !KNOWN.has(err.code)) return t('errors.GENERIC')
+  const details =
+    err.details && typeof err.details === 'object' && !Array.isArray(err.details) ? (err.details as Record<string, unknown>) : {}
+  if (WITH_ATTEMPTS.has(err.code) && Number.isInteger(details.attemptsLeft)) {
+    return t(`errors.${err.code}_attempts`, { count: details.attemptsLeft as number })
+  }
+  if (err.code === 'ACCOUNT_LOCKED' && typeof details.lockedUntil === 'string' && !Number.isNaN(Date.parse(details.lockedUntil))) {
+    return t('errors.ACCOUNT_LOCKED_until', { until: details.lockedUntil })
+  }
+  return t(`errors.${err.code}`)
 }

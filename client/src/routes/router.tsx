@@ -1,9 +1,17 @@
 import { createBrowserRouter, Navigate, type RouteObject } from 'react-router'
-import { RequireActive, RequireAuth, RequireRole } from './guards'
+import { Login } from '../pages/auth/Login'
+import { RegisterWizard } from '../pages/auth/register/RegisterWizard'
+import { RequireActive, RequireAnonymous, RequireAuth, RequireRole } from './guards'
 import { Home, Page } from './placeholders'
 
 export const routes: RouteObject[] = [
-  { path: '/login', element: <Page titleKey="login.title" /> },
+  {
+    element: <RequireAnonymous />,
+    children: [
+      { path: '/login', element: <Login /> },
+      { path: '/register', element: <RegisterWizard /> },
+    ],
+  },
   {
     element: <RequireAuth />,
     children: [
