@@ -17,12 +17,19 @@ const accountLocked = (lockedUntil: Date) =>
 export const invalidPin = (attemptsLeft: number) =>
   new AppError(403, 'INVALID_PIN', 'Wrong PIN', { attemptsLeft });
 
+type Outcome =
+  | { kind: 'ok' }
+  | { kind: 'locked'; lockedUntil: Date } // already locked: no compare happened
+  | { kind: 'lockedNow'; lockedUntil: Date } // this wrong PIN was the 3rd
+  | { kind: 'wrong'; attemptsLeft: number };
+
 /**
  * Checks `pin` against the user's hash under the shared lockout. Resolves on the right PIN;
  * otherwise throws `wrongPin(attemptsLeft)`, or 423 ACCOUNT_LOCKED when locked or on the 3rd failure.
+ * The lockout state is always re-read under a row lock; the passed-in user only gives id and hash.
  */
 export async function verifyPinWithLockout(
-  user: Pick<User, 'id' | 'pinHash' | 'lockedUntil'>,
+  user: Pick<User, 'id' | 'pinHash'>,
   pin: string,
   opts: {
     meta: { ip?: string };
@@ -30,69 +37,68 @@ export async function verifyPinWithLockout(
     failedAction: 'LOGIN_FAILED' | 'TRANSACTION_PIN_FAILED';
   },
 ): Promise<void> {
-  const { meta } = opts;
-  const now = new Date();
-  // Locked means locked, even for the right PIN.
-  if (user.lockedUntil && user.lockedUntil > now) throw accountLocked(user.lockedUntil);
+  const outcome = await prisma.$transaction(
+    async (tx): Promise<Outcome> => {
+      // A row lock, not an attempt claim: PIN checks for one user run one at a time against the
+      // fresh counter. Parallel guesses still compare at most 3 PINs, parallel right PINs all
+      // pass (none is refused for an attempt another request holds), and a crash rolls the
+      // whole check back, so there is no half-done state to clean up.
+      const [row] = await tx.$queryRaw<
+        { failed_pin_attempts: number; locked_until: Date | null }[]
+      >`SELECT failed_pin_attempts, locked_until FROM users
+        WHERE id = ${user.id}::uuid FOR NO KEY UPDATE`;
+      if (!row) throw new Error(`verifyPinWithLockout: no user ${user.id}`);
 
-  // Claim one of the 3 attempts atomically BEFORE the slow bcrypt compare, so parallel
-  // guesses can't all be compared before the lock lands. The claim also refuses while a lock
-  // is in force (a request that read the user just before another one locked it).
-  // shortcut: a crash between this claim and the lock write below leaves the counter at 3
-  // with no lock, so the account stays locked. Phase 7 admin 'unlock account' resets
-  // failedPinAttempts and lockedUntil.
-  const claimed = await prisma.user
-    .update({
-      where: {
-        id: user.id,
-        failedPinAttempts: { lt: MAX_PIN_ATTEMPTS },
-        OR: [{ lockedUntil: null }, { lockedUntil: { lte: now } }],
-      },
-      data: { failedPinAttempts: { increment: 1 } },
-      select: { failedPinAttempts: true },
-    })
-    .catch(async (e: unknown) => {
-      if ((e as { code?: string }).code !== 'P2025') throw e;
-      // Every attempt is held by a request still checking its PIN, or a lock just landed.
-      const fresh = await prisma.user.findUnique({
-        where: { id: user.id },
-        select: { lockedUntil: true },
-      });
-      throw accountLocked(fresh?.lockedUntil ?? new Date(now.getTime() + LOCK_MS));
-    });
+      // Locked means locked, even for the right PIN.
+      if (row.locked_until && row.locked_until > new Date()) {
+        return { kind: 'locked', lockedUntil: row.locked_until };
+      }
 
-  if (!(await verifyPin(pin, user.pinHash))) {
-    if (claimed.failedPinAttempts >= MAX_PIN_ATTEMPTS) {
-      const lockedUntil = new Date(Date.now() + LOCK_MS);
-      // Counter back to 0: once the lock expires the user gets a fresh 3 attempts.
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { lockedUntil, failedPinAttempts: 0 },
-      });
-      await writeAudit(prisma, {
-        actorId: user.id,
-        action: 'ACCOUNT_LOCKED',
-        targetType: 'user',
-        targetId: user.id,
-        ip: meta.ip,
-      });
-      throw accountLocked(lockedUntil);
-    }
-    const attemptsLeft = MAX_PIN_ATTEMPTS - claimed.failedPinAttempts;
-    await writeAudit(prisma, {
+      if (await verifyPin(pin, user.pinHash)) {
+        // Clear any earlier failures and any expired lock.
+        await tx.user.update({
+          where: { id: user.id },
+          data: { failedPinAttempts: 0, lockedUntil: null },
+        });
+        return { kind: 'ok' };
+      }
+
+      const failed = row.failed_pin_attempts + 1;
+      if (failed >= MAX_PIN_ATTEMPTS) {
+        const lockedUntil = new Date(Date.now() + LOCK_MS);
+        // Counter back to 0: once the lock expires the user gets a fresh 3 attempts.
+        await tx.user.update({
+          where: { id: user.id },
+          data: { lockedUntil, failedPinAttempts: 0 },
+        });
+        return { kind: 'lockedNow', lockedUntil };
+      }
+      await tx.user.update({ where: { id: user.id }, data: { failedPinAttempts: failed } });
+      return { kind: 'wrong', attemptsLeft: MAX_PIN_ATTEMPTS - failed };
+    },
+    { timeout: 10_000 },
+  );
+
+  // Audit and throw only after the commit: throwing inside would roll back the counter.
+  const audit = (action: 'ACCOUNT_LOCKED' | typeof opts.failedAction, metadata?: object) =>
+    writeAudit(prisma, {
       actorId: user.id,
-      action: opts.failedAction,
+      action,
       targetType: 'user',
       targetId: user.id,
-      metadata: { attemptsLeft },
-      ip: meta.ip,
+      metadata,
+      ip: opts.meta.ip,
     });
-    throw opts.wrongPin(attemptsLeft);
+  switch (outcome.kind) {
+    case 'ok':
+      return;
+    case 'locked':
+      throw accountLocked(outcome.lockedUntil);
+    case 'lockedNow':
+      await audit('ACCOUNT_LOCKED');
+      throw accountLocked(outcome.lockedUntil);
+    case 'wrong':
+      await audit(opts.failedAction, { attemptsLeft: outcome.attemptsLeft });
+      throw opts.wrongPin(outcome.attemptsLeft);
   }
-
-  // Right PIN: give back the attempt we claimed (and any earlier failures), clear any old lock.
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { failedPinAttempts: 0, lockedUntil: null },
-  });
 }

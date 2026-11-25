@@ -93,7 +93,8 @@ describe('verifyPinWithLockout', () => {
     expect((await row()).failedPinAttempts).toBe(0);
   });
 
-  it('refuses a user read just before the lock landed (the attempt claim fails)', async () => {
+  // The passed-in user is never trusted for the lockout: the row is re-read under its lock.
+  it('refuses a user object read before the lock landed (the row is re-read under the lock)', async () => {
     const stale = await row();
     const lockedUntil = new Date(Date.now() + 10 * MINUTE);
     await prisma.user.update({ where: { id: userId }, data: { lockedUntil } });
@@ -116,12 +117,29 @@ describe('verifyPinWithLockout', () => {
     const codes = results.map((r) => (r as PromiseRejectedResult).reason.code);
     expect(codes.filter((c) => c === 'INVALID_PIN')).toHaveLength(2);
     expect(codes.filter((c) => c === 'ACCOUNT_LOCKED')).toHaveLength(3);
-    expect((await row()).lockedUntil).not.toBeNull();
+    // A real lock: every 423 names the lockedUntil that is in the row, ~30 minutes ahead.
+    const { lockedUntil } = await row();
+    expect(lockedUntil!.getTime() - Date.now()).toBeGreaterThan(29 * MINUTE);
+    for (const r of results as PromiseRejectedResult[]) {
+      if (r.reason.code === 'ACCOUNT_LOCKED') expect(r.reason.details).toEqual({ lockedUntil });
+    }
     // One audit row per bcrypt compare: 2 wrong PINs + the lock.
     const compares = await prisma.auditLog.count({
       where: { action: { in: ['TRANSACTION_PIN_FAILED', 'ACCOUNT_LOCKED'] } },
     });
     expect(compares).toBeLessThanOrEqual(3);
+  });
+
+  it('lets 5 parallel RIGHT PINs all pass, with no lock and the counter at 0', async () => {
+    const user = await row();
+
+    const results = await Promise.allSettled(
+      Array.from({ length: 5 }, () => verifyPinWithLockout(user, PIN, opts)),
+    );
+
+    expect(results.map((r) => r.status)).toEqual(Array(5).fill('fulfilled'));
+    expect(await row()).toMatchObject({ failedPinAttempts: 0, lockedUntil: null });
+    expect(await prisma.auditLog.count()).toBe(0);
   });
 
   it('shares the counter with login: 2 wrong money PINs, then a wrong login locks', async () => {
