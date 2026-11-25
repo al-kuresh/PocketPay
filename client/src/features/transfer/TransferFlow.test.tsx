@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '../../i18n/en.json'
 import { useSession } from '../../stores/session'
-import { renderRoutes } from '../../test/render'
+import { renderPage, renderRoutes } from '../../test/render'
 import { apiError, server, testUser } from '../../test/server'
 
 type User = ReturnType<typeof renderRoutes>['user']
@@ -113,7 +113,7 @@ async function submitPin(user: User, button = en.transfer.confirm) {
 
 describe('TransferFlow: Send Money', () => {
   it('happy path: lookup → preview → PIN → receipt, with the right request bodies and a UUID key', async () => {
-    const { user, queryClient, router } = renderRoutes('/send-money')
+    const { user, queryClient, router } = await renderPage('/send-money')
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
 
     await enterDetails(user)
@@ -150,7 +150,7 @@ describe('TransferFlow: Send Money', () => {
 
   it('Review focus #2: a network error, then "Try again" → the SAME key, and the (replayed) receipt shows', async () => {
     answers = ['network']
-    const { user } = renderRoutes('/send-money')
+    const { user } = await renderPage('/send-money')
     await enterDetails(user)
     await confirmPreview(user)
     await submitPin(user)
@@ -167,7 +167,7 @@ describe('TransferFlow: Send Money', () => {
 
   it('Review focus #2: back to Enter, change the amount, confirm again → a DIFFERENT key', async () => {
     answers = ['network']
-    const { user } = renderRoutes('/send-money')
+    const { user } = await renderPage('/send-money')
     await enterDetails(user)
     await confirmPreview(user)
     await submitPin(user)
@@ -193,7 +193,7 @@ describe('TransferFlow: Send Money', () => {
 
   it('INVALID_PIN → still on the PIN step, the PIN cleared, attempts left shown', async () => {
     answers = [[403, apiError('INVALID_PIN', { attemptsLeft: 2 })]]
-    const { user } = renderRoutes('/send-money')
+    const { user } = await renderPage('/send-money')
     await enterDetails(user)
     await confirmPreview(user)
     await submitPin(user)
@@ -205,7 +205,7 @@ describe('TransferFlow: Send Money', () => {
 
   it('LIMIT_EXCEEDED → back on Preview with the message and its details', async () => {
     answers = [[422, apiError('LIMIT_EXCEEDED', { period: 'DAY', kind: 'AMOUNT', limit: '2500000', used: '2480000' })]]
-    const { user } = renderRoutes('/send-money')
+    const { user } = await renderPage('/send-money')
     await enterDetails(user)
     await confirmPreview(user)
     await submitPin(user)
@@ -221,7 +221,7 @@ describe('TransferFlow: Send Money', () => {
     '%s → back on Preview with the message',
     async (code) => {
       answers = [[422, apiError(code)]]
-      const { user } = renderRoutes('/send-money')
+      const { user } = await renderPage('/send-money')
       await enterDetails(user)
       await confirmPreview(user)
       await submitPin(user)
@@ -234,7 +234,7 @@ describe('TransferFlow: Send Money', () => {
 
   it('ACCOUNT_LOCKED → home, with the unlock time', async () => {
     answers = [[423, apiError('ACCOUNT_LOCKED', { lockedUntil: '2026-11-25T06:30:00.000Z' })]]
-    const { user, router } = renderRoutes('/send-money')
+    const { user, router } = await renderPage('/send-money')
     await enterDetails(user)
     await confirmPreview(user)
     await submitPin(user)
@@ -246,7 +246,7 @@ describe('TransferFlow: Send Money', () => {
 
 describe('TransferFlow drives Cash Out and Payment too', () => {
   it('Cash Out: a customer phone is refused (an agent is needed); an agent goes through to POST /cash-out', async () => {
-    const { user } = renderRoutes('/cash-out')
+    const { user } = await renderPage('/cash-out')
     const label = en.flows.CASH_OUT.receiver
     await user.type(receiverField(label), '01800000003')
     expect(await screen.findByText(en.transfer.wrongRole.AGENT)).toBeInTheDocument()
@@ -263,7 +263,7 @@ describe('TransferFlow drives Cash Out and Payment too', () => {
   })
 
   it('Payment: a customer phone is refused (a merchant is needed); a merchant goes through to POST /payment', async () => {
-    const { user } = renderRoutes('/payment')
+    const { user } = await renderPage('/payment')
     const label = en.flows.PAYMENT.receiver
     await user.type(receiverField(label), '01800000003')
     expect(await screen.findByText(en.transfer.wrongRole.MERCHANT)).toBeInTheDocument()

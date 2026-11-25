@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { HistoryItem } from '../../api/types'
@@ -85,6 +85,18 @@ describe('History', () => {
     expect(last.get('cursor')).toBeNull()
   })
 
+  it.each([
+    ['CUSTOMER', ['SEND_MONEY', 'CASH_OUT', 'PAYMENT', 'CASH_IN']],
+    ['AGENT', ['CASH_IN', 'CASH_OUT', 'FLOAT_TOPUP']],
+    ['MERCHANT', ['PAYMENT']],
+  ] as const)('the type filter offers a %s only the types it can have', async (role, types) => {
+    useSession.getState().signIn({ user: testUser({ role }), accessToken: 't' })
+    renderRoutes('/history')
+    const options = within(await screen.findByLabelText(en.history.type)).getAllByRole('option')
+    expect(options.map((o) => (o as HTMLOptionElement).value)).toEqual(['', ...types])
+    expect(options.map((o) => o.textContent)).toEqual([en.history.all, ...types.map((type) => en.flows[type].title)])
+  })
+
   it('the date filter sends from and to as YYYY-MM-DD', async () => {
     renderRoutes('/history')
     await screen.findByText('Karim H***')
@@ -145,5 +157,14 @@ describe('Receipt', () => {
     expect(await screen.findByText(en.receipt.notFound)).toBeInTheDocument()
     expect(screen.getByText(en.receipt.notFoundBody)).toBeInTheDocument()
     expect(calls).toBe(1)
+  })
+})
+
+describe('History errors', () => {
+  it('a failed first page shows the translated error instead of the list', async () => {
+    server.use(http.get('/api/v1/transactions', () => HttpResponse.json(apiError('RATE_LIMITED'), { status: 429 })))
+    renderRoutes('/history')
+    expect(await screen.findByRole('alert')).toHaveTextContent(en.errors.RATE_LIMITED)
+    expect(screen.queryByText(en.history.empty)).not.toBeInTheDocument()
   })
 })

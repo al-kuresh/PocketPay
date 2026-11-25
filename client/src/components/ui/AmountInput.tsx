@@ -39,9 +39,9 @@ export function AmountInput({ label, defaultValue = '', onAmountChange, autoFocu
         {label}
       </label>
       <div
-        className={`flex items-baseline gap-2 rounded-xl border bg-surface px-4 py-3 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary-dark ${error ? 'border-danger' : 'border-border-strong'}`}
+        className={`flex items-baseline gap-2 rounded-xl border bg-surface px-4 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary-dark ${error ? 'border-danger' : 'border-border-strong'}`}
       >
-        <span aria-hidden className="text-xl font-semibold text-text-muted">
+        <span aria-hidden className="text-lg font-semibold text-text-muted">
           ৳
         </span>
         <input
@@ -54,7 +54,7 @@ export function AmountInput({ label, defaultValue = '', onAmountChange, autoFocu
           onChange={handleChange}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${id}-error` : undefined}
-          className="w-full min-w-0 bg-transparent text-3xl font-semibold tabular-nums text-text outline-none placeholder:text-text-muted"
+          className="w-full min-w-0 bg-transparent py-3 text-3xl font-semibold tabular-nums text-text outline-none placeholder:text-text-muted"
         />
       </div>
       {error && (

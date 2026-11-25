@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../i18n/en.json'
-import { renderRoutes } from '../../../test/render'
+import { renderPage } from '../../../test/render'
 import { useSession } from '../../../stores/session'
 import { apiError, readMultipart, server, testUser, type SentFile } from '../../../test/server'
 
@@ -44,7 +44,7 @@ beforeEach(() => {
 })
 afterEach(() => vi.restoreAllMocks())
 
-const visit = () => renderRoutes('/register')
+const visit = () => renderPage('/register')
 
 const photo = (name: string) => new File([new Uint8Array(1000)], name, { type: 'image/jpeg' })
 
@@ -78,7 +78,7 @@ const progress = () => screen.getByRole('progressbar')
 
 describe('RegisterWizard', () => {
   it('the happy path through all 4 steps sends ONE multipart request with the 3 files and the fields', async () => {
-    const { router, user } = visit()
+    const { router, user } = await visit()
     expect(progress()).toHaveAttribute('aria-valuenow', '1')
     await phoneStep(user)
     expect(await screen.findByText(/482913/)).toBeInTheDocument() // the dev OTP hint
@@ -114,7 +114,7 @@ describe('RegisterWizard', () => {
   })
 
   it('Back from step 4 keeps step 3 filled in, and it can continue (a customer has no shop name)', async () => {
-    const { user } = visit()
+    const { user } = await visit()
     await phoneStep(user)
     await otpStep(user)
     await identityStep(user)
@@ -127,7 +127,7 @@ describe('RegisterWizard', () => {
   })
 
   it('the selfie picker opens the front camera', async () => {
-    const { user } = visit()
+    const { user } = await visit()
     await phoneStep(user)
     await otpStep(user)
     await identityStep(user)
@@ -135,7 +135,7 @@ describe('RegisterWizard', () => {
   })
 
   it('the shop-name field appears only for a merchant, and is sent', async () => {
-    const { user } = visit()
+    const { user } = await visit()
     await phoneStep(user)
     await otpStep(user)
     await stepHeading(en.register.identity.heading)
@@ -152,7 +152,7 @@ describe('RegisterWizard', () => {
   })
 
   it('a merchant without a shop name is blocked', async () => {
-    const { user } = visit()
+    const { user } = await visit()
     await phoneStep(user)
     await otpStep(user)
     await identityStep(user, { role: 'MERCHANT' })
@@ -161,7 +161,7 @@ describe('RegisterWizard', () => {
   })
 
   it('an under-18 date of birth is blocked client-side', async () => {
-    const { user } = visit()
+    const { user } = await visit()
     await phoneStep(user)
     await otpStep(user)
     await identityStep(user, { dob: `${new Date().getUTCFullYear() - 17}-12-31` })
@@ -171,7 +171,7 @@ describe('RegisterWizard', () => {
   })
 
   it('PIN ≠ confirm is blocked, and nothing is sent', async () => {
-    const { user } = visit()
+    const { user } = await visit()
     await phoneStep(user)
     await otpStep(user)
     await identityStep(user)
@@ -181,7 +181,7 @@ describe('RegisterWizard', () => {
   })
 
   it('a weak PIN (a run like 12345) is blocked, and nothing is sent', async () => {
-    const { user } = visit()
+    const { user } = await visit()
     await phoneStep(user)
     await otpStep(user)
     await identityStep(user)
@@ -191,7 +191,7 @@ describe('RegisterWizard', () => {
   })
 
   it('missing photos are blocked, and nothing is sent', async () => {
-    const { user } = visit()
+    const { user } = await visit()
     await phoneStep(user)
     await otpStep(user)
     await identityStep(user)
@@ -204,7 +204,7 @@ describe('RegisterWizard', () => {
   })
 
   it('a wrong code → the translated OTP_INVALID with attempts left', async () => {
-    const { user } = visit()
+    const { user } = await visit()
     await phoneStep(user)
     await otpStep(user, '000000')
     expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -214,7 +214,7 @@ describe('RegisterWizard', () => {
 
   it('an expired registration token → back to step 1 with a message (phone kept)', async () => {
     completeAnswer = [401, apiError('REGISTRATION_TOKEN_INVALID')]
-    const { user } = visit()
+    const { user } = await visit()
     await phoneStep(user)
     await otpStep(user)
     await identityStep(user)
@@ -228,7 +228,7 @@ describe('RegisterWizard', () => {
 
   it('another failure stays on step 4, with the PINs cleared', async () => {
     completeAnswer = [409, apiError('NID_TAKEN')]
-    const { user } = visit()
+    const { user } = await visit()
     await phoneStep(user)
     await otpStep(user)
     await identityStep(user)
@@ -241,7 +241,7 @@ describe('RegisterWizard', () => {
 
   it('the registration token never touches localStorage or sessionStorage', async () => {
     const setItem = vi.spyOn(Storage.prototype, 'setItem')
-    const { user } = visit()
+    const { user } = await visit()
     await phoneStep(user)
     await otpStep(user)
     await identityStep(user)
@@ -258,7 +258,7 @@ describe('RegisterWizard', () => {
   })
 
   it('Back from step 1 goes to /login; "Log in" links there too', async () => {
-    const { router, user } = visit()
+    const { router, user } = await visit()
     expect(within(screen.getByRole('main')).getByRole('link', { name: en.register.login })).toHaveAttribute('href', '/login')
     await user.click(screen.getByRole('button', { name: en.common.back }))
     expect(router.state.location.pathname).toBe('/login')
@@ -269,11 +269,53 @@ describe('RegisterWizard', () => {
     const bn = (await import('../../../i18n/bn.json')).default
     act(() => useLanguage.getState().setLang('bn'))
     try {
-      visit()
+      await visit()
       expect(screen.getByRole('heading', { name: bn.register.phone.heading })).toBeInTheDocument()
     } finally {
       act(() => useLanguage.getState().setLang('en'))
       localStorage.clear()
     }
+  })
+})
+
+describe('OTP step: Resend', () => {
+  const resendName = (seconds: number) => en.register.otp.resendIn.replace('{{seconds, number}}', String(seconds))
+
+  it('is disabled with a countdown from resendInSeconds, then sends a new code and starts again', async () => {
+    let sends = 0
+    server.use(
+      http.post('/api/v1/auth/register/request-otp', () => {
+        sends++
+        return HttpResponse.json({ success: true, data: { expiresInSeconds: 300, resendInSeconds: 1, devOtp: sends === 1 ? '111111' : '222222' } })
+      }),
+    )
+    const { user } = await visit()
+    await phoneStep(user)
+    expect(await screen.findByRole('button', { name: resendName(1) })).toBeDisabled()
+    const resend = await screen.findByRole('button', { name: en.register.otp.resend }, { timeout: 3000 })
+    expect(resend).toBeEnabled()
+    await user.click(resend)
+    expect(await screen.findByText(/222222/)).toBeInTheDocument() // the new code's hint
+    expect(sends).toBe(2)
+    expect(screen.getByRole('button', { name: resendName(1) })).toBeDisabled()
+  })
+
+  it('OTP_COOLDOWN → its message, and the countdown restarts from retryAfterSeconds', async () => {
+    let sends = 0
+    server.use(
+      http.post('/api/v1/auth/register/request-otp', () =>
+        ++sends === 1
+          ? HttpResponse.json({ success: true, data: { expiresInSeconds: 300, resendInSeconds: 1, devOtp: '482913' } })
+          : HttpResponse.json(apiError('OTP_COOLDOWN', { retryAfterSeconds: 42 }), { status: 429 }),
+      ),
+    )
+    const { user } = await visit()
+    await phoneStep(user)
+    await user.click(await screen.findByRole('button', { name: en.register.otp.resend }, { timeout: 3000 }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(en.errors.OTP_COOLDOWN)
+    expect(screen.getByRole('button', { name: resendName(42) })).toBeDisabled()
+    // still on step 2, and the first code still works
+    await otpStep(user)
+    expect(await stepHeading(en.register.identity.heading)).toBeInTheDocument()
   })
 })

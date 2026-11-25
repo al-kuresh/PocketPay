@@ -76,4 +76,12 @@ describe('route guards', () => {
     visit('/login')
     expect(screen.queryByRole('heading')).not.toBeInTheDocument()
   })
+
+  it('a code-split page shows the skeleton while its chunk loads, then the page', async () => {
+    signIn({ role: 'CUSTOMER', status: 'ACTIVE' })
+    visit('/profile/pin') // no other test in this file loads ChangePin, so its chunk is not cached yet
+    expect(document.querySelector('[aria-busy="true"]')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Change PIN' })).toBeInTheDocument()
+    expect(document.querySelector('[aria-busy="true"]')).not.toBeInTheDocument()
+  })
 })

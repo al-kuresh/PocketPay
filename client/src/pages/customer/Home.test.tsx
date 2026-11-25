@@ -1,11 +1,11 @@
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { PublicUser } from '../../api/types'
 import en from '../../i18n/en.json'
 import { useSession } from '../../stores/session'
 import { renderRoutes } from '../../test/render'
-import { server, testUser } from '../../test/server'
+import { apiError, server, testUser } from '../../test/server'
 
 let historyQueries: URLSearchParams[]
 
@@ -93,5 +93,37 @@ describe('customer Home', () => {
     signIn()
     renderRoutes('/')
     expect(await screen.findByText(en.home.empty)).toBeInTheDocument()
+  })
+
+  it('a KYC approval seen by /me (ACTIVE) enables Send Money without a new login', async () => {
+    let answerMe = () => {}
+    const meHeld = new Promise<void>((resolve) => (answerMe = resolve))
+    server.use(
+      http.get('/api/v1/me', async () => {
+        await meHeld
+        return HttpResponse.json({
+          success: true,
+          data: { user: testUser({ status: 'ACTIVE', kycStatus: 'APPROVED' }), wallet: { id: 'w1', type: 'CUSTOMER', balance: '0' } },
+        })
+      }),
+    )
+    signIn({ status: 'PENDING_KYC', kycStatus: 'PENDING' })
+    renderRoutes('/')
+    const send = await screen.findByRole('button', { name: en.flows.SEND_MONEY.title })
+    expect(send).toBeDisabled() // the store's PENDING_KYC, before /me answers
+    answerMe()
+    await waitFor(() => expect(send).toBeEnabled())
+    expect(screen.queryByText(en.kyc.pending.title)).not.toBeInTheDocument()
+    expect(useSession.getState().user?.status).toBe('ACTIVE')
+  })
+
+  it('a failed load shows the translated error for the balance and the list, not a blank page', async () => {
+    const limited = () => HttpResponse.json(apiError('RATE_LIMITED'), { status: 429 })
+    server.use(http.get('/api/v1/me', limited), http.get('/api/v1/transactions', limited))
+    signIn()
+    const { user } = renderRoutes('/')
+    await waitFor(() => expect(screen.getAllByRole('alert').map((a) => a.textContent)).toEqual([en.errors.RATE_LIMITED, en.errors.RATE_LIMITED]))
+    await user.click(screen.getByRole('button', { name: en.home.showBalance }))
+    expect(screen.queryByText(/৳\d/)).not.toBeInTheDocument() // no amount is made up
   })
 })

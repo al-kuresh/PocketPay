@@ -3,6 +3,7 @@ import { ReceiptText } from 'lucide-react'
 import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { history } from '../../api/transactions'
+import type { HistoryItem, Role } from '../../api/types'
 import { AppShell } from '../../components/layout/AppShell'
 import { Button } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/EmptyState'
@@ -10,13 +11,21 @@ import { Input } from '../../components/ui/Input'
 import { HistoryRow, HistorySkeleton } from '../../features/wallet/RecentTransactions'
 import { errorMessage } from '../../i18n/errors'
 import { dhakaToday } from '../../lib/dates'
+import { useSession } from '../../stores/session'
 
-const TYPES = ['SEND_MONEY', 'CASH_IN', 'CASH_OUT', 'PAYMENT', 'FLOAT_TOPUP'] as const
+// Only the types a role can be part of (server flow table), so the filter never offers a list that is always empty.
+const TYPES: Record<Role, ReadonlyArray<HistoryItem['type']>> = {
+  CUSTOMER: ['SEND_MONEY', 'CASH_OUT', 'PAYMENT', 'CASH_IN'],
+  AGENT: ['CASH_IN', 'CASH_OUT', 'FLOAT_TOPUP'],
+  MERCHANT: ['PAYMENT'],
+  ADMIN: [],
+}
 
 /** Every transaction, newest first, a page at a time (`nextCursor`). Filters: type, and a date range in Dhaka days. */
 export function History() {
   const { t } = useTranslation()
   const typeId = useId()
+  const role = useSession((s) => s.user?.role)
   // '' = no filter. Dates are the inputs' own YYYY-MM-DD, which the API reads as Dhaka days.
   const [filters, setFilters] = useState({ type: '', from: '', to: '' })
   const today = dhakaToday()
@@ -44,7 +53,7 @@ export function History() {
             className="h-12 rounded-xl border border-border-strong bg-surface px-4 text-base text-text"
           >
             <option value="">{t('history.all')}</option>
-            {TYPES.map((type) => (
+            {(role ? TYPES[role] : []).map((type) => (
               <option key={type} value={type}>
                 {t(`flows.${type}.title`)}
               </option>

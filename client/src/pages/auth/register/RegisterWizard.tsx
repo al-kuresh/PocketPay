@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router'
+import type { OtpSent } from '../../../api/types'
 import { AppShell } from '../../../components/layout/AppShell'
 import { LanguageToggle } from '../../../components/ui/LanguageToggle'
 import { IdentityStep, type Identity } from './IdentityStep'
@@ -31,7 +32,7 @@ export function RegisterWizard() {
   const navigate = useNavigate()
   const [step, setStep] = useState(1)
   const [phone, setPhone] = useState('')
-  const [devOtp, setDevOtp] = useState<string>()
+  const [sent, setSent] = useState<OtpSent | null>(null)
   // React state only: never localStorage, sessionStorage or the URL. A reload drops it (the user starts again).
   const [registrationToken, setRegistrationToken] = useState<string | null>(null)
   const [identity, setIdentity] = useState<Identity | null>(null)
@@ -56,18 +57,18 @@ export function RegisterWizard() {
         <PhoneStep
           defaultPhone={phone}
           notice={restartReason}
-          onDone={(p, otp) => {
+          onDone={(p, answer) => {
             setPhone(p)
-            setDevOtp(otp)
+            setSent(answer)
             setRestartReason(null)
             setStep(2)
           }}
         />
       )}
-      {step === 2 && (
+      {step === 2 && sent && (
         <OtpStep
           phone={phone}
-          devOtp={devOtp}
+          sent={sent}
           onDone={(token) => {
             setRegistrationToken(token)
             setStep(3)

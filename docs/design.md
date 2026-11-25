@@ -513,15 +513,35 @@ The 4 money POSTs require an `Idempotency-Key` header (a UUID): `201` for a new 
   White text on plain `#EA580C` is only 3.6:1 contrast, so it's used only for large text (the balance amount, headings). Buttons use `primary-dark`.
 - **Detailed UI rules:** `design/TASTE.md` (source of truth for visual decisions).
 - **Customer home:** balance card (tap to reveal), action grid (Send Money, Cash Out, Payment, History), recent transactions and a bottom nav (Home · History · Profile).
-- **Transfer flow:** stepper with amount keypad → preview → PIN → success receipt (with a share/print option).
+- **Transfer flow:** enter details (the amount on the phone's own numeric keypad) → preview (amount, fee, total) → PIN → success receipt (share, or copy the TrxID).
 - **Login page:** "Try demo" buttons for Customer, Agent, Merchant and Admin.
 - **Registration wizard:**
   - a progress bar (4 steps)
   - camera/gallery image picker with preview, retake and a size check before upload
   - a "Do not upload a real NID" banner on the live demo
 - **KYC pending screen:** a friendly "Your account is under review" page; money actions are disabled until approval.
-- **States everywhere:** loading skeletons, empty states, clear error toasts.
+- **States everywhere:** loading skeletons, empty states, translated errors (a toast for a failed action; an inline alert that stays on screen when a page's data fails to load), and money actions disabled, not hidden, while KYC is pending or rejected.
 - **Accessibility basics:** labels on inputs, visible focus, enough colour contrast.
+- **Balance card:** the white amount sits on `primary` (the gradient runs `primary → primary → primary-light`, so the light end is only the far corner). The small "Balance" label is a `primary-dark` pill (white text at 5.2:1), never small text on the gradient.
+
+### 11.1 Language and font
+
+- **English and Bangla**, switched by a toggle in the header (and on Profile). Every user-facing string goes through i18next, with a key in both `en.json` and `bn.json`; a test fails the suite when a Bangla key is missing.
+- **Bangla digits in Bangla mode:** amounts, counts and dates use `bn-BD` (`৳৯,৩৯৫.০০`, `২৫ নভে, ২০২৬`), with the same lakh grouping as English (`en-IN`). Inputs accept both digit sets. Phone numbers and TrxIDs stay in ASCII digits.
+- **API errors are mapped to translated messages** (`errors.<CODE>`); an unknown code shows a generic message, never the server's `message`.
+- `<html lang>` follows the language. The choice is the only thing kept in `localStorage` (`pocketpay.lang`).
+- **Font:** Noto Sans Bengali (from `@fontsource/noto-sans-bengali`, bundled) for Bangla script and `৳` only, through its `unicode-range`; Latin text stays on the system font, so an English-only visit downloads no font. Weights 400, 500 and 600.
+
+### 11.2 Client architecture
+
+- **Stack:** React 19, Vite, Tailwind v4 (all visual values in the `@theme` block of `client/src/index.css`), React Router, TanStack Query (server state), Zustand (session and language), axios, react-hook-form + zod, lucide-react icons.
+- **Session in memory:** the access token and user live only in a Zustand store, never in `localStorage` or `sessionStorage`. On start, the app calls `POST /auth/refresh` (the httpOnly cookie) to restore the session; until it settles, guarded pages show a skeleton. The session's user is kept in sync with every `GET /me`, so a KYC approval enables the money actions without a new login.
+- **Single-flight refresh:** a `401 UNAUTHENTICATED` starts one shared refresh, and every waiting request is retried once with the new token. A `409 REFRESH_IN_PROGRESS` is retried once after about 300 ms; any other refresh failure clears the session (→ `/login`). Login, registration and refresh requests are never refreshed.
+- **Idempotency key per confirm screen:** `crypto.randomUUID()` is created when the user reaches the PIN step and reused for every retry of that confirm, so a double tap or a network retry replays instead of paying twice. Going back and changing the transfer gets a new key.
+- **Money in the client:** amounts stay poisha strings; maths uses `BigInt`. One display helper (`formatTaka`) and one input parser (`takaToPoisha`, at most 2 decimals, no floats).
+- **Cache cleared on logout:** when the session becomes anonymous (logout or a failed refresh), the TanStack Query cache is cleared, so the next person on the same phone never sees the previous user's balance or history.
+- **Retries:** a query retries once, and only on a network error or a 5xx; a mutation never retries on its own.
+- **Routes and roles:** `/` is each role's home; a page of another role, or a money route for a non-ACTIVE user, redirects to `/`. Login and the homes are in the main bundle; registration, history, receipts, profile and the money flows are code-split (`React.lazy`) and show the same skeleton while their chunk loads.
 
 ---
 
@@ -575,19 +595,19 @@ The 4 money POSTs require an `Idempotency-Key` header (a UUID): `201` for a new 
 
 ## 14. Build phases
 
-| # | Phase | Done when… |
-|---|---|---|
-| 1 | Design doc + ER diagram | This doc is approved and committed; the ERD is in `docs/diagrams/` |
-| 2 | Repo setup | client + server scaffolded; TS, ESLint, Prettier; Docker Postgres runs; `/health` returns OK; README skeleton |
-| 3 | Auth + registration + uploads | 4-step registration with NID + 3 image uploads to Cloudinary, login, refresh, logout, PIN lockout, role guard; tests pass |
-| 4 | Wallet + ledger | Prisma schema migrated; seed creates system wallets, admin and demo users; ledger service + reconciliation; tests pass |
-| 5 | Money flows | Send Money, Cash In, Cash Out, Payment, preview, idempotency, limits, fees; concurrency test passes |
-| 6 | Frontend screens | All customer, agent and merchant screens connected to the API; works on phone-sized screens; Profile screen with change PIN (PATCH /auth/pin) and change profile photo (PUT /me/photo), including their API endpoints |
-| 7 | Admin panel + KYC review | All admin pages working; KYC review with signed image URLs, approve/reject/resubmit end-to-end |
-| 8 | Tests + CI | Coverage of the critical paths; GitHub Actions green on PRs |
-| 9 | Docker + production config | API Dockerfile; env validation; production logging; CORS/cookies set for the real domains |
-| 10 | Deploy | Live frontend + API + DB; demo accounts work on the live link |
-| 11 | README polish | Screenshots/GIF, architecture + ERD images, "how money is kept safe" section, setup steps, live link |
+| # | Phase | Status | Done when… |
+|---|---|---|---|
+| 1 | Design doc + ER diagram | Done | This doc is approved and committed; the ERD is in `docs/diagrams/` |
+| 2 | Repo setup | Done | client + server scaffolded; TS, ESLint, Prettier; Docker Postgres runs; `/health` returns OK; README skeleton |
+| 3 | Auth + registration + uploads | Done | 4-step registration with NID + 3 image uploads to Cloudinary, login, refresh, logout, PIN lockout, role guard; tests pass |
+| 4 | Wallet + ledger | Done | Prisma schema migrated; seed creates system wallets, admin and demo users; ledger service + reconciliation; tests pass |
+| 5 | Money flows | Done | Send Money, Cash In, Cash Out, Payment, preview, idempotency, limits, fees; concurrency test passes |
+| 6 | Frontend screens | Done | All customer, agent and merchant screens connected to the API; works on phone-sized screens; Profile screen with change PIN (PATCH /auth/pin) and change profile photo (PUT /me/photo), including their API endpoints |
+| 7 | Admin panel + KYC review |  | All admin pages working; KYC review with signed image URLs, approve/reject/resubmit end-to-end |
+| 8 | Tests + CI |  | Coverage of the critical paths; GitHub Actions green on PRs |
+| 9 | Docker + production config |  | API Dockerfile; env validation; production logging; CORS/cookies set for the real domains |
+| 10 | Deploy |  | Live frontend + API + DB; demo accounts work on the live link |
+| 11 | README polish |  | Screenshots/GIF, architecture + ERD images, "how money is kept safe" section, setup steps, live link |
 
 ---
 
@@ -632,6 +652,16 @@ The 4 money POSTs require an `Idempotency-Key` header (a UUID): `201` for a new 
 - P. **Money and lookup rate limits are per user**, not per IP, because of CGNAT (§10, §12). Login and OTP stay per IP.
 - Q. **The preview only checks things about the caller.** It already skipped the receiver's cap; it now also skips a Cash In customer's limits, and the POST refuses those with `RECEIVER_LIMIT_EXCEEDED` and no details. Before, `LIMIT_EXCEEDED { used }` told any agent a customer's Cash In totals (§8.4, §10).
 - R. **One user's PIN checks queue in memory before the row lock**, so their waiting requests hold no DB connection (§10).
+
+**Phase 6 build (2026-11-25):**
+- S. **One pull request for the whole phase**, **no mockups** (the design came from `design/TASTE.md` and a screenshot-and-measure design loop), and **English + Bangla** from the start.
+- T. **The live demo shows the OTP on screen** whenever the server sends `devOtp` (not only in dev builds), because the demo has no SMS gateway.
+- U. **The phone's own numeric keypad** (`inputMode="decimal"`) for amounts instead of an on-screen keypad. The PIN is five boxes over one hidden password input, so the PIN is never React state.
+- V. **Registration token in React state only**, never storage or the URL: a reload restarts registration.
+- W. **History filters by type and Dhaka date range, with a "Load more" button** (keyset cursor). The type list shows only the types the user's role can be part of.
+- X. **OTP "Resend"** waits for the server's `resendInSeconds`, and restarts its countdown from `retryAfterSeconds` on `OTP_COOLDOWN`.
+- Y. **Change photo uploads as soon as a photo is picked**; Change PIN is its own page and logs out the user's other devices (the server revokes their sessions).
+- Z. **A page's load error is an inline alert, not a toast** (§11), so a failed balance or list doesn't vanish after a few seconds.
 
 ## 16. Left to the builder
 - Exact component styling within the §11 palette (decided in Phase 6).

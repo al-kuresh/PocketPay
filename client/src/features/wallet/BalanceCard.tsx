@@ -22,12 +22,13 @@ export function BalanceCard({ label }: { label: string }) {
         type="button"
         onClick={() => setShown((s) => !s)}
         aria-label={shown ? undefined : t('home.showBalance')}
-        // design-ok: balance card
-        className="flex flex-col gap-2 rounded-2xl bg-linear-to-br from-primary to-primary-light p-6 text-left text-white"
+        // design-ok: balance card. via-primary keeps the white amount on primary (3.6:1, large text); the light end is only the corner.
+        className="flex flex-col items-start gap-4 rounded-2xl bg-linear-to-br from-primary via-primary to-primary-light p-6 text-left text-white"
       >
-        <span className="flex items-center justify-between text-lg font-semibold">
+        {/* Small text never sits on the gradient (TASTE.md): the label is a primary-dark pill, white at 5.2:1. */}
+        <span className="flex items-center gap-2 rounded-full bg-primary-dark px-3 py-1 text-sm font-semibold">
           {label}
-          {shown ? <EyeOff aria-hidden className="size-5" /> : <Eye aria-hidden className="size-5" />}
+          {shown ? <EyeOff aria-hidden className="size-4" /> : <Eye aria-hidden className="size-4" />}
         </span>
         {!shown ? (
           <span className="text-4xl font-semibold tabular-nums">৳ ••••</span>

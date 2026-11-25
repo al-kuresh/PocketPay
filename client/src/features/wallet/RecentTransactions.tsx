@@ -24,7 +24,7 @@ export function RecentTransactions() {
         <h2 id={headingId} className="text-lg font-semibold text-text">
           {t('home.recent')}
         </h2>
-        <Link to="/history" className="flex min-h-11 items-center text-sm text-primary-dark">
+        <Link to="/history" className="flex min-h-11 min-w-11 items-center justify-end text-sm text-primary-dark">
           {t('home.seeAll')}
         </Link>
       </div>

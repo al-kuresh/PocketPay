@@ -13,7 +13,7 @@ export function EmptyState({ icon: Icon, title, message, action }: EmptyStatePro
   return (
     <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
       <Icon aria-hidden className="size-8 text-text-muted" />
-      <p className="text-base font-semibold text-text">{title}</p>
+      <p className="text-lg font-semibold text-text">{title}</p>
       {message && <p className="text-sm text-text-muted">{message}</p>}
       {action}
     </div>

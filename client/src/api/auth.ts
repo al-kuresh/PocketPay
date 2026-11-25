@@ -24,5 +24,7 @@ export { refreshSession as refresh } from './client'
 /** GET /me: the user and their wallet (null for admins). */
 export async function me() {
   const { data } = await api.get<Envelope<MeData>>('/me')
+  // Keep the session's user current: a KYC approval (or a new photo) reaches the guards and money buttons without a new login.
+  if (useSession.getState().status === 'authenticated') useSession.setState({ user: data.data.user })
   return data.data
 }

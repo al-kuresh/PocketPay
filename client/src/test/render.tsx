@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { render } from '@testing-library/react'
+import { render, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
@@ -19,4 +19,13 @@ export function renderRoutes(path: string) {
     </QueryClientProvider>,
   )
   return { router, queryClient, user: userEvent.setup() }
+}
+
+/** renderRoutes for a lazy (code-split) page: resolves once its chunk has loaded and the Suspense skeleton is gone. */
+export async function renderPage(path: string) {
+  const rendered = renderRoutes(path)
+  await waitFor(() => {
+    if (document.querySelector('[aria-busy="true"]')) throw new Error(`${path} is still loading`)
+  })
+  return rendered
 }

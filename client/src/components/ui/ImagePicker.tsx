@@ -50,7 +50,7 @@ export function ImagePicker({ label, capture, onChange, error }: ImagePickerProp
       {preview ? (
         <div className="flex flex-col gap-2">
           <img src={preview} alt={label} className="h-40 w-full rounded-xl border border-border object-cover" />
-          <Button variant="ghost" onClick={retake} className="self-start">
+          <Button variant="ghost" onClick={retake} className="-ml-3 self-start">
             <Camera aria-hidden className="size-5" />
             {t('imagePicker.retake')}
           </Button>

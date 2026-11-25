@@ -5,7 +5,7 @@
     "pin": "PIN",
     "submit": "Log in",
     "noAccount": "New to PocketPay?",
-    "register": "Create an account",
+    "register": "Sign up",
     "demo": {
       "title": "Try the demo",
       "hint": "One tap logs you in to a sample account.",
@@ -84,7 +84,7 @@
     "comingSoonBody": "You're logged in as an admin. Reviewing KYC, fees and limits comes next."
   },
   "register": {
-    "title": "Create an account",
+    "title": "Sign up",
     "progress": "Step {{step, number}} of {{total, number}}",
     "haveAccount": "Already have an account?",
     "login": "Log in",
@@ -99,7 +99,9 @@
       "sentTo": "We sent it to {{phone}}.",
       "label": "6-digit code",
       "devHint": "Demo mode, no SMS is sent. Your code is {{code}}.",
-      "submit": "Verify"
+      "submit": "Verify",
+      "resend": "Resend code",
+      "resendIn": "Resend code in {{seconds, number}} s"
     },
     "identity": {
       "heading": "About you",

@@ -1,16 +1,8 @@
 import { createBrowserRouter, Navigate, type RouteObject } from 'react-router'
 import { Login } from '../pages/auth/Login'
-import { RegisterWizard } from '../pages/auth/register/RegisterWizard'
-import { CashIn } from '../pages/agent/CashIn'
-import { CashOut } from '../pages/customer/CashOut'
-import { Payment } from '../pages/customer/Payment'
-import { SendMoney } from '../pages/customer/SendMoney'
-import { ChangePin } from '../pages/shared/ChangePin'
-import { History } from '../pages/shared/History'
-import { Profile } from '../pages/shared/Profile'
-import { ReceiptPage } from '../pages/shared/Receipt'
 import { RequireActive, RequireAnonymous, RequireAuth, RequireRole } from './guards'
 import { Home } from './home'
+import { CashIn, CashOut, ChangePin, History, Payment, Profile, ReceiptPage, RegisterWizard, SendMoney } from './pages'
 
 export const routes: RouteObject[] = [
   {
