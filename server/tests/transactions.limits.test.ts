@@ -93,6 +93,17 @@ describe('loadRules and loadCustomerMaxBalance', () => {
     await prisma.systemSetting.delete({ where: { key: 'CUSTOMER_MAX_BALANCE' } });
     await expect(loadCustomerMaxBalance(prisma)).rejects.toThrow('CUSTOMER_MAX_BALANCE');
   });
+
+  it('refuses a CUSTOMER_MAX_BALANCE that is not a plain digit string', async () => {
+    // BigInt('') is 0n and BigInt(' 5') is 5n: without the check, '' would cap everyone at ৳0.
+    for (const bad of ['', ' 100', '-5', '1.5', '1e6', '0x10', 'abc']) {
+      await setSetting('CUSTOMER_MAX_BALANCE', bad);
+      const err = await loadCustomerMaxBalance(prisma).catch((e: unknown) => e);
+      expect(err, bad).toBeInstanceOf(Error);
+      expect(err, bad).not.toHaveProperty('code'); // a plain Error, not an AppError
+      expect((err as Error).message, bad).toContain('CUSTOMER_MAX_BALANCE');
+    }
+  });
 });
 
 describe('checkAmountBounds', () => {

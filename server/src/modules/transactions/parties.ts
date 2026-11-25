@@ -13,6 +13,10 @@ export interface Party {
 
 type Account = User & { wallet: Wallet | null };
 
+/** Also thrown by the transfer guard, which re-reads the status inside the transaction. */
+export const receiverNotActive = () =>
+  new AppError(422, 'RECEIVER_NOT_ACTIVE', "This account can't receive money right now");
+
 export function findAccountByPhone(db: Db, phone: string): Promise<Account | null> {
   return db.user.findUnique({ where: { phone }, include: { wallet: true } });
 }
@@ -47,7 +51,5 @@ export function assertReceiver(
       expectedRole,
     });
   }
-  if (receiver.status !== 'ACTIVE') {
-    throw new AppError(422, 'RECEIVER_NOT_ACTIVE', "This account can't receive money right now");
-  }
+  if (receiver.status !== 'ACTIVE') throw receiverNotActive();
 }

@@ -16,5 +16,9 @@ export async function loadRules(db: Db, type: FlowType) {
 export async function loadCustomerMaxBalance(db: Db): Promise<bigint> {
   const row = await db.systemSetting.findUnique({ where: { key: 'CUSTOMER_MAX_BALANCE' } });
   if (!row) throw new Error('system_settings has no CUSTOMER_MAX_BALANCE row: run the seed');
+  // BigInt() would read '' as 0n (a cap of ৳0) and accept ' 5', '0x10' or '1e3'.
+  if (!/^\d+$/.test(row.value)) {
+    throw new Error(`system_settings CUSTOMER_MAX_BALANCE must be poisha digits, got "${row.value}"`);
+  }
   return BigInt(row.value);
 }
