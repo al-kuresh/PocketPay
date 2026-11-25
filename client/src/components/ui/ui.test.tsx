@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createRef } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -135,32 +135,71 @@ describe('ImagePicker', () => {
     expect(renderPicker().input).toHaveAttribute('accept', 'image/jpeg,image/png,image/webp')
   })
 
-  it('a 3 MB file → the size error, and onChange is not called', () => {
+  it('an 11 MB file → the size error, and onChange is not called', async () => {
     const { input, onChange } = renderPicker()
-    fireEvent.change(input, { target: { files: [file(3 * MB)] } })
-    expect(screen.getByRole('alert')).toHaveTextContent(en.errors.FILE_TOO_LARGE)
+    fireEvent.change(input, { target: { files: [file(11 * MB)] } })
+    expect(await screen.findByRole('alert')).toHaveTextContent(en.errors.FILE_TOO_LARGE)
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  it('a file of exactly 2 MB is accepted (the server limit is 2 MiB)', () => {
+  it('a file of exactly 10 MB is accepted (the server limit is 10 MiB)', async () => {
     const { input, onChange } = renderPicker()
-    fireEvent.change(input, { target: { files: [file(2 * MB)] } })
-    expect(onChange).toHaveBeenCalledTimes(1)
+    fireEvent.change(input, { target: { files: [file(10 * MB)] } })
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1))
   })
 
-  it('a HEIC (or other type) → the type error, and onChange is not called', () => {
+  it('uploads the shrunk copy: longest side 1600px, JPEG 0.85, EXIF orientation applied', async () => {
+    const bitmap = { width: 4000, height: 3000, close: vi.fn() }
+    const decode = vi.fn().mockResolvedValue(bitmap)
+    vi.stubGlobal('createImageBitmap', decode)
+    const drawImage = vi.fn()
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage } as unknown as CanvasRenderingContext2D)
+    const toBlob = vi
+      .spyOn(HTMLCanvasElement.prototype, 'toBlob')
+      .mockImplementation((done) => done(new Blob([new Uint8Array(300_000)], { type: 'image/jpeg' })))
+    try {
+      const { input, onChange } = renderPicker()
+      const original = file(8 * MB, 'IMG_2041.png', 'image/png')
+      fireEvent.change(input, { target: { files: [original] } })
+      await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1))
+
+      expect(decode).toHaveBeenCalledWith(original, { imageOrientation: 'from-image' })
+      expect(drawImage).toHaveBeenCalledWith(bitmap, 0, 0, 1600, 1200)
+      expect(toBlob).toHaveBeenCalledWith(expect.any(Function), 'image/jpeg', 0.85)
+      const sent = onChange.mock.calls[0][0] as File
+      expect(sent).not.toBe(original)
+      expect(sent).toMatchObject({ name: 'IMG_2041.jpg', type: 'image/jpeg', size: 300_000 })
+    } finally {
+      vi.unstubAllGlobals()
+      vi.restoreAllMocks()
+    }
+  })
+
+  it('keeps the original when the browser cannot decode it', async () => {
+    vi.stubGlobal('createImageBitmap', vi.fn().mockRejectedValue(new DOMException('bad', 'InvalidStateError')))
+    try {
+      const { input, onChange } = renderPicker()
+      const original = file(MB)
+      fireEvent.change(input, { target: { files: [original] } })
+      await waitFor(() => expect(onChange).toHaveBeenCalledWith(original))
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('a HEIC (or other type) → the type error, and onChange is not called', async () => {
     const { input, onChange } = renderPicker()
     fireEvent.change(input, { target: { files: [file(100, 'x.heic', 'image/heic')] } })
-    expect(screen.getByRole('alert')).toHaveTextContent(en.errors.UNSUPPORTED_FILE_TYPE)
+    expect(await screen.findByRole('alert')).toHaveTextContent(en.errors.UNSUPPORTED_FILE_TYPE)
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  it('a good file → onChange(file) and a preview; "Retake" clears it', () => {
+  it('a good file → onChange(file) and a preview; "Retake" clears it', async () => {
     const { input, onChange } = renderPicker()
     const f = file(MB)
     fireEvent.change(input, { target: { files: [f] } })
-    expect(onChange).toHaveBeenCalledWith(f)
-    expect(screen.getByRole('img', { name: 'NID front' })).toBeInTheDocument()
+    expect(await screen.findByRole('img', { name: 'NID front' })).toBeInTheDocument()
+    expect(onChange).toHaveBeenCalledWith(f) // jsdom has no createImageBitmap: the original goes through
     fireEvent.click(screen.getByRole('button', { name: en.imagePicker.retake }))
     expect(onChange).toHaveBeenLastCalledWith(null)
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
@@ -221,6 +260,18 @@ describe('Toast', () => {
     const { show } = useToast()
     return <button onClick={() => show('Saved')}>show</button>
   }
+
+  it.each([
+    ['a crash in a tap handler (window error)', () => new ErrorEvent('error', { error: new TypeError('x is not a function') })],
+    ['a promise nobody awaited (unhandledrejection)', () => new Event('unhandledrejection')],
+  ])('%s → the generic error toast, translated', (_label, event) => {
+    render(<ToastProvider>page</ToastProvider>)
+    act(() => void window.dispatchEvent(event()))
+    expect(screen.getByRole('status')).toHaveTextContent(en.errors.GENERIC)
+    act(() => useLanguage.getState().setLang('bn'))
+    act(() => void window.dispatchEvent(event()))
+    expect(screen.getByRole('status')).toHaveTextContent(bn.errors.GENERIC)
+  })
 
   it('useToast().show() displays the message, then it goes away', () => {
     vi.useFakeTimers()

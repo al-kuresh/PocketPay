@@ -19,10 +19,9 @@ export function Home() {
   const { t } = useTranslation()
   const status = useSession((s) => s.user?.status)
   return (
-    <AppShell title={t('nav.home')} nav headerEnd={<LanguageToggle />}>
+    <AppShell title={t('nav.home')} nav headerEnd={<LanguageToggle />} hero={<BalanceCard label={t('home.balance')} />}>
       {status === 'PENDING_KYC' && <StatusBanner kind="PENDING_KYC" />}
       {status === 'REJECTED' && <StatusBanner kind="REJECTED" />}
-      <BalanceCard label={t('home.balance')} />
       <ActionGrid actions={ACTIONS} />
       <RecentTransactions />
     </AppShell>

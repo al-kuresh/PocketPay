@@ -3,11 +3,20 @@ import type { ButtonHTMLAttributes } from 'react'
 
 type Variant = 'primary' | 'secondary' | 'ghost'
 
-const VARIANTS: Record<Variant, string> = {
+/** `on` while usable (or loading: it stays orange behind the spinner), `off` when disabled: grey, not a paler orange. */
+const VARIANTS: Record<Variant, { base: string; on: string; off: string }> = {
   // The one primary action per screen: full width, filled, in the thumb zone.
-  primary: 'h-12 w-full bg-primary-dark font-semibold text-white hover:bg-primary-darker',
-  secondary: 'h-12 w-full border border-border-strong bg-surface font-semibold text-text hover:bg-surface-sunken',
-  ghost: 'px-3 text-primary-dark hover:bg-primary-50',
+  primary: {
+    base: 'h-14 w-full rounded-2xl font-semibold',
+    on: 'bg-primary-dark text-white hover:bg-primary-darker active:scale-95',
+    off: 'bg-surface-sunken text-text-muted',
+  },
+  secondary: {
+    base: 'h-14 w-full rounded-2xl border bg-surface font-semibold',
+    on: 'border-border-strong text-text hover:bg-surface-sunken active:scale-95',
+    off: 'border-border text-text-muted',
+  },
+  ghost: { base: 'rounded-xl px-3', on: 'text-primary-dark hover:bg-primary-50', off: 'text-text-muted' },
 }
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -17,12 +26,14 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export function Button({ variant = 'primary', loading = false, disabled, type = 'button', className = '', children, ...rest }: ButtonProps) {
+  const v = VARIANTS[variant]
+  const off = disabled && !loading
   return (
     <button
       type={type}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={`inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-xl text-base transition-colors duration-150 ease-out-quint disabled:cursor-not-allowed disabled:opacity-50 ${VARIANTS[variant]} ${className}`}
+      className={`inline-flex min-h-11 min-w-11 items-center justify-center gap-2 text-base transition duration-150 ease-out-quint disabled:cursor-not-allowed ${v.base} ${off ? v.off : v.on} ${className}`}
       {...rest}
     >
       {loading && <LoaderCircle aria-hidden className="size-5 animate-spin" />}

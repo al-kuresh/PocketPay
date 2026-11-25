@@ -165,6 +165,32 @@ describe('TransferFlow: Send Money', () => {
     }
   })
 
+  it.each([
+    [true, en.transfer.copied],
+    [false, en.transfer.copyByHand.replace('{{trxId}}', 'PP7K2M9QXA')],
+  ])('Share on plain http (no navigator.share or clipboard): execCommand copy → %s → "%s"', async (copied, toast) => {
+    const { user } = await renderPage('/send-money')
+    await enterDetails(user)
+    await confirmPreview(user)
+    await submitPin(user)
+    await screen.findByText('PP7K2M9QXA')
+
+    const clipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
+    const execCommand = vi.fn(() => copied)
+    const originalExec = document.execCommand
+    document.execCommand = execCommand
+    try {
+      await user.click(screen.getByRole('button', { name: en.transfer.share }))
+      expect(execCommand).toHaveBeenCalledWith('copy')
+      expect(screen.getByRole('status')).toHaveTextContent(toast)
+      expect(document.querySelector('textarea')).toBeNull() // the helper textarea is gone
+    } finally {
+      if (clipboard) Object.defineProperty(navigator, 'clipboard', clipboard)
+      document.execCommand = originalExec
+    }
+  })
+
   it('Review focus #2: a network error, then "Try again" → the SAME key, and the (replayed) receipt shows', async () => {
     answers = ['network']
     const { user } = await renderPage('/send-money')

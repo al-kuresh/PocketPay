@@ -1,5 +1,6 @@
 import { CircleAlert, CircleCheck } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ToastContext, type ToastApi, type ToastTone } from './toast-context'
 
 const SHOW_FOR = 4000
@@ -21,6 +22,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   )
   useEffect(() => () => clearTimeout(timer.current), [])
 
+  // A crash in a tap handler (or a promise nobody awaited) is never silent: the generic error toast.
+  const { t } = useTranslation()
+  useEffect(() => {
+    const crashed = () => api.show(t('errors.GENERIC'))
+    window.addEventListener('error', crashed)
+    window.addEventListener('unhandledrejection', crashed)
+    return () => {
+      window.removeEventListener('error', crashed)
+      window.removeEventListener('unhandledrejection', crashed)
+    }
+  }, [api, t])
+
   const Icon = toast?.tone === 'success' ? CircleCheck : CircleAlert
   return (
     <ToastContext value={api}>
@@ -30,8 +43,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         aria-live="polite"
         className="pointer-events-none fixed inset-x-0 bottom-16 z-20 mx-auto flex w-full max-w-phone justify-center px-6 pb-4"
       >
+        {/* pointer-events-auto on the toast: its text can be long-pressed and copied (the copy-by-hand TrxID). */}
         {toast && (
-          <div className="flex items-center gap-2 rounded-xl bg-text px-4 py-3 text-sm text-white shadow-lg">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-xl bg-text px-4 py-3 text-sm text-white shadow-lg">
             <Icon aria-hidden className="size-5 shrink-0" />
             {toast.message}
           </div>

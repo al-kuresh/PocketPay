@@ -159,7 +159,7 @@ Seeded fees are **modelled on bKash's published charges** (checked on 2026-11-23
 - Users can change their **profile photo** later from the Profile page. NID images can't be changed after approval.
 - **Upload rules:**
   - JPEG, PNG or WebP only, checked by the file's real content (magic bytes), not just its name
-  - max 2 MB per image
+  - max 10 MB per image. The app first shrinks photos on the phone (longest side 1600px, JPEG), so a camera photo usually uploads well under 1 MB
   - resized to at most 1600px wide and re-encoded to WebP on the server, which also strips EXIF metadata such as GPS location
 - **Storage:** Cloudinary.
   - NID images and selfies are stored as **private (authenticated) assets**. The API gives the admin a short-lived signed URL (5 minutes) when they open a KYC review.
@@ -472,7 +472,7 @@ The 4 money POSTs require an `Idempotency-Key` header (a UUID): `201` for a new 
 - **Authorization:** `requireRole()` middleware; users can only read their own transactions. A receipt for a transaction the caller's wallet has no entry in is `404 TRANSACTION_NOT_FOUND`, exactly like an unknown id, so nobody can probe other people's trxIds.
 - **Secrets:** only in `.env` (git-ignored); `.env.example` is committed with placeholder values.
 - **Uploads:**
-  - file type, size and count limits enforced in multer (in memory, never written to disk)
+  - file type, size (10 MB per image) and count limits enforced in multer (in memory, never written to disk)
   - real content checked with `file-type`
   - re-encoded with `sharp`, which strips EXIF
   - KYC images stored privately; only admins get signed, short-lived URLs
@@ -491,10 +491,10 @@ The 4 money POSTs require an `Idempotency-Key` header (a UUID): `201` for a new 
 
   | Token | Hex | Use |
   |---|---|---|
-  | `primary` | `#EA580C` | Brand colour: header bar, balance card, icons, active tab, large text |
-  | `primary-dark` | `#C2410C` | Buttons (white text: 5.2:1 contrast, passes WCAG AA), links, pressed states |
+  | `primary` | `#EA580C` | Brand colour: icons and large text on white |
+  | `primary-dark` | `#C2410C` | App bar and home hero, buttons (white text: 5.2:1 contrast, passes WCAG AA), links, active tab; also the `theme-color` |
   | `primary-darker` | `#9A3412` | Button hover/pressed |
-  | `primary-light` | `#F97316` | Gradient highlight on the balance card, illustrations (never behind small text) |
+  | `primary-light` | `#F97316` | Illustrations (never behind small text) |
   | `primary-50` | `#FFF7ED` | Soft tinted backgrounds: selected rows, info boxes |
   | `canvas` | `#F8FAFC` | Page background behind the phone frame |
   | `surface` | `#FFFFFF` | Main background and cards |
@@ -510,19 +510,19 @@ The 4 money POSTs require an `Idempotency-Key` header (a UUID): `201` for a new 
   | `container-phone` | `420px` | Max width of the phone-width app frame (`max-w-phone`) |
   | `ease-out-quint` | `cubic-bezier(0.22, 1, 0.36, 1)` | Easing for hover/press (150ms) and reveals (200ms) |
 
-  White text on plain `#EA580C` is only 3.6:1 contrast, so it's used only for large text (the balance amount, headings). Buttons use `primary-dark`.
+  White text on plain `#EA580C` is only 3.6:1 contrast, so every orange surface that carries white text (app bar, home hero, buttons) is `primary-dark`.
 - **Detailed UI rules:** `design/TASTE.md` (source of truth for visual decisions).
-- **Customer home:** balance card (tap to reveal), action grid (Send Money, Cash Out, Payment, History), recent transactions and a bottom nav (Home · History · Profile).
-- **Transfer flow:** enter details (the amount on the phone's own numeric keypad) → preview (amount, fee, total) → PIN → success receipt (share, or copy the TrxID).
+- **Customer home:** the orange app bar flows into a hero block with the balance (tap to reveal), action grid (Send Money, Cash Out, Payment, History), recent transactions and a bottom nav (Home · History · Profile).
+- **Transfer flow:** enter details (the amount on the phone's own numeric keypad) → preview (a receipt-style card: receiver, amount, fee, total) → PIN → success receipt (share, or copy the TrxID; on plain http, where neither API exists, an `execCommand('copy')` fallback, and failing that a toast showing the TrxID).
 - **Login page:** "Try demo" buttons for Customer, Agent, Merchant and Admin.
 - **Registration wizard:**
   - a progress bar (4 steps)
   - camera/gallery image picker with preview, retake and a size check before upload
   - a "Do not upload a real NID" banner on the live demo
 - **KYC pending screen:** a friendly "Your account is under review" page; money actions are disabled until approval.
-- **States everywhere:** loading skeletons, empty states, translated errors (a toast for a failed action; an inline alert that stays on screen when a page's data fails to load), and money actions disabled, not hidden, while KYC is pending or rejected.
+- **States everywhere:** loading skeletons, empty states, translated errors (a toast for a failed action, and the generic error toast for any uncaught error or rejected promise; an inline alert that stays on screen when a page's data fails to load), and money actions disabled, not hidden, while KYC is pending or rejected.
 - **Accessibility basics:** labels on inputs, visible focus, enough colour contrast.
-- **Balance card:** the white amount sits on `primary` (the gradient runs `primary → primary → primary-light`, so the light end is only the far corner). The small "Balance" label is a `primary-dark` pill (white text at 5.2:1), never small text on the gradient.
+- **Home hero:** the app bar's `primary-dark` continues into a block with `rounded-b-3xl` corners that holds the balance (white text at 5.2:1, so the small "Balance" label is fine). No gradients anywhere.
 
 ### 11.1 Language and font
 
@@ -537,7 +537,7 @@ The 4 money POSTs require an `Idempotency-Key` header (a UUID): `201` for a new 
 - **Stack:** React 19, Vite, Tailwind v4 (all visual values in the `@theme` block of `client/src/index.css`), React Router, TanStack Query (server state), Zustand (session and language), axios, react-hook-form + zod, lucide-react icons.
 - **Session in memory:** the access token and user live only in a Zustand store, never in `localStorage` or `sessionStorage`. On start, the app calls `POST /auth/refresh` (the httpOnly cookie) to restore the session; until it settles, guarded pages show a skeleton. The session's user is kept in sync with every `GET /me`, so a KYC approval enables the money actions without a new login.
 - **Single-flight refresh:** a `401 UNAUTHENTICATED` starts one shared refresh, and every waiting request is retried once with the new token. A `409 REFRESH_IN_PROGRESS` is retried once after about 300 ms; any other refresh failure clears the session (→ `/login`). Login, registration and refresh requests are never refreshed.
-- **Idempotency key per confirm screen:** `crypto.randomUUID()` is created when the user reaches the PIN step and reused for every retry of that confirm, so a double tap or a network retry replays instead of paying twice. Going back and changing the transfer gets a new key.
+- **Idempotency key per confirm screen:** a v4 UUID (from `crypto.getRandomValues`: `crypto.randomUUID` only exists in secure contexts, and `dev:phone` is plain http) is created when the user reaches the PIN step and reused for every retry of that confirm, so a double tap or a network retry replays instead of paying twice. Going back and changing the transfer gets a new key.
 - **Money in the client:** amounts stay poisha strings; maths uses `BigInt`. One display helper (`formatTaka`) and one input parser (`takaToPoisha`, at most 2 decimals, no floats).
 - **Cache cleared on logout:** when the session becomes anonymous (logout or a failed refresh), the TanStack Query cache is cleared, so the next person on the same phone never sees the previous user's balance or history.
 - **Retries:** a query retries once, and only on a network error or a 5xx; a mutation never retries on its own.
@@ -634,7 +634,7 @@ The 4 money POSTs require an `Idempotency-Key` header (a UUID): `201` for a new 
 - B. Only 10-digit NIDs are accepted, as requested. Older 13- and 17-digit NIDs are rejected.
 - C. Users must be 18 or older.
 - D. Images are stored in Cloudinary. KYC images are private with 5-minute signed URLs; the profile photo is public.
-- E. Images: 2 MB max, JPEG/PNG/WebP, re-encoded to WebP and EXIF stripped.
+- E. Images: 10 MB max (shrunk on the phone before upload), JPEG/PNG/WebP, re-encoded to WebP and EXIF stripped.
 - F. Agent commission is 0.40% of the cash-out amount (my assumption; no public figure found).
 - G. Customer wallet balance is capped at ৳5,00,000, as bKash does.
 - H. "Priyo Agent" discounted cash-out (bKash charges ৳13.95 per ৳1,000 up to ৳50,000 a month) is left for v2.

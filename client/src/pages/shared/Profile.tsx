@@ -64,7 +64,7 @@ export function Profile() {
       <Card className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <span className="text-sm text-text">{t('language.label')}</span>
-          <LanguageToggle />
+          <LanguageToggle tone="surface" />
         </div>
         <Link
           to="/profile/pin"

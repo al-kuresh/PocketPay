@@ -1,9 +1,10 @@
 import { Camera } from 'lucide-react'
 import { useEffect, useId, useState, type ChangeEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { shrinkImage } from '../../lib/images'
 import { Button } from './Button'
 
-const MAX_BYTES = 2 * 1024 * 1024 // the server's limit (multer: 2 MiB per image)
+const MAX_BYTES = 10 * 1024 * 1024 // the server's limit (multer: 10 MiB per image)
 const TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
 interface ImagePickerProps {
@@ -15,7 +16,7 @@ interface ImagePickerProps {
   error?: string
 }
 
-/** Camera or gallery, with a preview and "Retake". Refuses a wrong type or > 2 MB before anything is uploaded. */
+/** Camera or gallery, with a preview and "Retake". Refuses a wrong type or > 10 MB, then hands on a shrunk copy (lib/images). */
 export function ImagePicker({ label, capture, onChange, error }: ImagePickerProps) {
   const { t } = useTranslation()
   const id = useId()
@@ -26,12 +27,13 @@ export function ImagePicker({ label, capture, onChange, error }: ImagePickerProp
     if (preview) URL.revokeObjectURL(preview)
   }, [preview])
 
-  function handleFile(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!TYPES.includes(file.type)) return setOwnError('errors.UNSUPPORTED_FILE_TYPE')
-    if (file.size > MAX_BYTES) return setOwnError('errors.FILE_TOO_LARGE')
+  async function handleFile(e: ChangeEvent<HTMLInputElement>) {
+    const picked = e.target.files?.[0]
+    if (!picked) return
+    if (!TYPES.includes(picked.type)) return setOwnError('errors.UNSUPPORTED_FILE_TYPE')
+    if (picked.size > MAX_BYTES) return setOwnError('errors.FILE_TOO_LARGE')
     setOwnError(null)
+    const file = await shrinkImage(picked)
     setPreview(URL.createObjectURL(file))
     onChange(file)
   }
@@ -66,7 +68,7 @@ export function ImagePicker({ label, capture, onChange, error }: ImagePickerProp
             type="file"
             accept={TYPES.join(',')}
             capture={capture}
-            onChange={handleFile}
+            onChange={(e) => void handleFile(e)}
             aria-invalid={shownError ? true : undefined}
             aria-describedby={shownError ? `${id}-error` : undefined}
             className="sr-only"

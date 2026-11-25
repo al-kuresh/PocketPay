@@ -13,10 +13,14 @@ export function MerchantHome() {
   const { t } = useTranslation()
   const user = useSession((s) => s.user)
   return (
-    <AppShell title={user?.shopName ?? t('nav.home')} nav headerEnd={<LanguageToggle />}>
+    <AppShell
+      title={user?.shopName ?? t('nav.home')}
+      nav
+      headerEnd={<LanguageToggle />}
+      hero={<BalanceCard label={t('home.balance')} />}
+    >
       {user?.status === 'PENDING_KYC' && <StatusBanner kind="PENDING_KYC" />}
       {user?.status === 'REJECTED' && <StatusBanner kind="REJECTED" />}
-      <BalanceCard label={t('home.balance')} />
       <Card className="flex flex-col gap-1">
         <p className="text-sm text-text-muted">{t('merchant.yourNumber')}</p>
         <p className="text-lg font-semibold tabular-nums text-text">{user?.phone}</p>

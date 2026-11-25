@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CircleCheck, Share2 } from 'lucide-react'
+import { ArrowRight, CircleCheck, Share2 } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router'
@@ -15,6 +15,7 @@ import { PhoneInput } from '../../components/ui/PhoneInput'
 import { PinInput, type PinInputHandle } from '../../components/ui/PinInput'
 import { useToast } from '../../components/ui/toast-context'
 import { errorMessage } from '../../i18n/errors'
+import { copyText } from '../../lib/clipboard'
 import { formatDateTime } from '../../lib/dates'
 import { formatTaka } from '../../lib/money'
 import { phoneSchema } from '../../lib/validation'
@@ -192,34 +193,44 @@ function EnterStep({ type, flow, details, onChange, onNext }: EnterStepProps) {
       <div className="mt-auto">
         <Button type="submit" disabled={!canNext} loading={check.isPending}>
           {t('transfer.next')}
+          {!check.isPending && <ArrowRight aria-hidden className="size-5" />}
         </Button>
       </div>
     </form>
   )
 }
 
-/** Receiver, amount, fee and the total (the biggest thing), before the PIN. */
+/** One receipt-style card: the receiver on top, amount and fee, a dashed tear line, the total as the hero. Then the PIN. */
 function PreviewStep({ preview, notice, onNext }: { preview: Preview; notice: string | null; onNext(): void }) {
   const { t } = useTranslation()
   const lang = useLanguage((s) => s.lang)
   return (
     <div className="flex flex-1 flex-col gap-6">
-      <PartyCard label={t('transfer.to')} party={preview.receiver} />
-      <dl className="flex flex-col gap-3">
-        <Row label={t('transfer.amount')}>{formatTaka(preview.amount, { lang })}</Row>
-        <Row label={t('transfer.fee')}>{formatTaka(preview.fee, { lang })}</Row>
-        <div className="flex items-baseline justify-between gap-3 border-t border-border pt-3">
-          <dt className="text-sm text-text-muted">{t('transfer.total')}</dt>
-          <dd className="text-3xl font-semibold tabular-nums text-text">{formatTaka(preview.total, { lang })}</dd>
+      <Card className="flex flex-col gap-4 p-6">
+        <div className="flex flex-col gap-1">
+          <p className="text-sm text-text-muted">{t('transfer.to')}</p>
+          <p className="text-base font-semibold text-text">{preview.receiver.name}</p>
+          {preview.receiver.phone && <p className="text-sm tabular-nums text-text-muted">{preview.receiver.phone}</p>}
         </div>
-      </dl>
+        <dl className="flex flex-col gap-3 border-t border-border pt-4">
+          <Row label={t('transfer.amount')}>{formatTaka(preview.amount, { lang })}</Row>
+          <Row label={t('transfer.fee')}>{formatTaka(preview.fee, { lang })}</Row>
+          <div className="mt-1 flex items-baseline justify-between gap-3 border-t border-dashed border-border-strong pt-4">
+            <dt className="text-sm text-text-muted">{t('transfer.total')}</dt>
+            <dd className="text-3xl font-semibold tabular-nums text-text">{formatTaka(preview.total, { lang })}</dd>
+          </div>
+        </dl>
+      </Card>
       {notice && (
         <p role="alert" className="text-sm text-danger">
           {notice}
         </p>
       )}
       <div className="mt-auto">
-        <Button onClick={onNext}>{t('transfer.next')}</Button>
+        <Button onClick={onNext}>
+          {t('transfer.next')}
+          <ArrowRight aria-hidden className="size-5" />
+        </Button>
       </div>
     </div>
   )
@@ -326,12 +337,8 @@ export function ReceiptView({ receipt }: { receipt: Receipt }) {
       }
       return
     }
-    try {
-      await navigator.clipboard.writeText(receipt.trxId)
-      toast.show(t('transfer.copied'), 'success')
-    } catch {
-      toast.show(t('errors.GENERIC'))
-    }
+    if (await copyText(receipt.trxId)) toast.show(t('transfer.copied'), 'success')
+    else toast.show(t('transfer.copyByHand', { trxId: receipt.trxId })) // the user can still read it off the toast
   }
 
   return (
@@ -383,15 +390,5 @@ function PartyLines({ party }: { party: Party }) {
       <span className="block">{party.name}</span>
       {party.phone && <span className="block text-text-muted">{party.phone}</span>}
     </>
-  )
-}
-
-function PartyCard({ label, party }: { label: string; party: Party }) {
-  return (
-    <Card className="flex flex-col gap-1">
-      <p className="text-sm text-text-muted">{label}</p>
-      <p className="text-base font-semibold text-text">{party.name}</p>
-      {party.phone && <p className="text-sm tabular-nums text-text-muted">{party.phone}</p>}
-    </Card>
   )
 }

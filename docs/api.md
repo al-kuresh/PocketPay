@@ -134,7 +134,7 @@ Creates the account with identity details, 3 photos and a PIN, and logs the user
 | `role` | `CUSTOMER`, `AGENT` or `MERCHANT` |
 | `shopName` | 2–80 characters, **required for `MERCHANT`**, ignored for other roles |
 | `pin`, `confirmPin` | 5 digits, equal; not one digit repeated (`11111`) and not a run (`12345`, `54321`) |
-| `nidFront`, `nidBack`, `selfie` | files: JPEG, PNG or WebP (checked by content, not file name), max 2 MB each |
+| `nidFront`, `nidBack`, `selfie` | files: JPEG, PNG or WebP (checked by content, not file name), max 10 MB each |
 
 ```bash
 curl -X POST http://localhost:4000/api/v1/auth/register/complete \
@@ -158,7 +158,7 @@ the selfie also becomes the public 512×512 profile photo. New accounts are `PEN
 | Error | When |
 |---|---|
 | `401 REGISTRATION_TOKEN_INVALID` | missing, expired, garbage or already-used token. Two submissions with the same token create **one** account; the other gets this (or a 409) |
-| `413 FILE_TOO_LARGE` | an image is over 2 MB |
+| `413 FILE_TOO_LARGE` | an image is over 10 MB |
 | `400 VALIDATION_ERROR` | a field breaks a rule above (`details: [{ path, message }]`), or the upload itself is malformed: an unknown file field or too many files (`details: { field, reason }`) |
 | `400 MISSING_FILE` | one of the 3 images is missing. `details: { field }` |
 | `415 UNSUPPORTED_FILE_TYPE` | not JPEG/PNG/WebP (e.g. an iPhone HEIC photo or a renamed `.txt`), damaged, or over 50 megapixels |
@@ -290,7 +290,7 @@ devices' access tokens stay valid until they expire (15 min).
 
 Replaces the public profile photo. **Auth:** `Authorization: Bearer <accessToken>`, checked
 **before** the upload is read. **Body:** `multipart/form-data` with one file field, `photo`:
-JPEG, PNG or WebP (checked by content, not file name), max 2 MB.
+JPEG, PNG or WebP (checked by content, not file name), max 10 MB.
 
 ```bash
 curl -X PUT http://localhost:4000/api/v1/me/photo \
@@ -312,7 +312,7 @@ private NID and selfie images are never changed.
 | `401 UNAUTHENTICATED` | missing, expired or invalid access token |
 | `400 MISSING_FILE` | no `photo` file. `details: { field: "photo" }` |
 | `400 VALIDATION_ERROR` | malformed upload: another file field, more than one file, or a text field (`details: { field, reason }`) |
-| `413 FILE_TOO_LARGE` | over 2 MB |
+| `413 FILE_TOO_LARGE` | over 10 MB |
 | `415 UNSUPPORTED_FILE_TYPE` | not JPEG/PNG/WebP (e.g. a PDF renamed `.jpg`), damaged, or over 50 megapixels |
 | `502 UPLOAD_FAILED` | the photo couldn't be stored. Nothing changed; retrying is safe |
 

@@ -8,7 +8,7 @@ import { errorMessage } from '../../i18n/errors'
 import { formatTaka } from '../../lib/money'
 import { useLanguage } from '../../stores/language'
 
-/** The wallet balance from `me`, hidden as `৳ ••••` until tapped. `label` is already translated. */
+/** The wallet balance from `me`, hidden as `৳ ••••` until tapped. Lives in AppShell's `hero`. `label` is already translated. */
 export function BalanceCard({ label }: { label: string }) {
   const { t } = useTranslation()
   const lang = useLanguage((s) => s.lang)
@@ -22,11 +22,10 @@ export function BalanceCard({ label }: { label: string }) {
         type="button"
         onClick={() => setShown((s) => !s)}
         aria-label={shown ? undefined : t('home.showBalance')}
-        // design-ok: balance card. via-primary keeps the white amount on primary (3.6:1, large text); the light end is only the corner.
-        className="flex flex-col items-start gap-4 rounded-2xl bg-linear-to-br from-primary via-primary to-primary-light p-6 text-left text-white"
+        // Sits in AppShell's primary-dark hero: white text there is 5.2:1, small text included.
+        className="flex min-h-11 w-full flex-col items-start gap-2 rounded-2xl text-left text-white"
       >
-        {/* Small text never sits on the gradient (TASTE.md): the label is a primary-dark pill, white at 5.2:1. */}
-        <span className="flex items-center gap-2 rounded-full bg-primary-dark px-3 py-1 text-sm font-semibold">
+        <span className="flex items-center gap-2 text-sm">
           {label}
           {shown ? <EyeOff aria-hidden className="size-4" /> : <Eye aria-hidden className="size-4" />}
         </span>
@@ -39,7 +38,7 @@ export function BalanceCard({ label }: { label: string }) {
         )}
       </button>
       {wallet.isError && (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-sm text-white">
           {errorMessage(t, wallet.error)}
         </p>
       )}
