@@ -2,16 +2,20 @@
 
 A mobile-first digital wallet (bKash-style) built as a full-stack, production-grade project.
 
-> 🚧 Work in progress — **Phase 5 (money flows) complete**: Send Money, Cash In, Cash Out and Payment over the API, with fees, limits, the balance cap, PIN checks, idempotency, preview, receiver lookup, history and receipts. Next up: Phase 6 (frontend screens).
+> 🚧 Work in progress — **Phase 6 (frontend) complete**: the mobile web app for customers, agents and merchants, in English and Bangla. Log in (or tap a demo account), register with OTP, NID and photos, see your balance, send money, cash in, cash out and pay a merchant (enter details → preview → PIN → receipt), browse history and receipts, and change your PIN, photo and language. Next up: Phase 7 (admin panel and KYC review).
 
 ## Features (planned for v1)
 - Registration with phone, OTP, 10-digit NID, and NID/selfie photo upload
 - Send Money, Cash In, Cash Out, Payment, with fees and limits modelled on bKash
 - Double-entry ledger, row locking and idempotency keys, so money is never lost or duplicated
 - Customer, Agent, Merchant and Admin roles, plus an admin panel with KYC review
+- A phone-first web app in English and Bangla (with Bangla digits)
+
+## Screenshots
+_Coming in Phase 11._
 
 ## Tech stack
-**Frontend:** React · Vite · TypeScript · Tailwind CSS
+**Frontend:** React · Vite · TypeScript · Tailwind CSS · React Router · TanStack Query · Zustand · i18next (English + Bangla)
 **Backend:** Node.js · Express · TypeScript · Zod
 **Database:** PostgreSQL · Prisma
 **Tooling:** Docker · GitHub Actions · Vitest · ESLint · Prettier
@@ -23,6 +27,7 @@ A mobile-first digital wallet (bKash-style) built as a full-stack, production-gr
 - [Phase 3 plan](docs/plans/2026-11-24-phase-3-auth-registration.md)
 - [Phase 4 plan](docs/plans/2026-11-24-phase-4-wallet-ledger.md)
 - [Phase 5 plan](docs/plans/2026-11-24-phase-5-money-flows.md)
+- [Phase 6 plan](docs/plans/2026-11-25-phase-6-frontend.md)
 - [ER diagram](docs/diagrams/erd.md)
 
 ## Run locally
@@ -63,7 +68,19 @@ A mobile-first digital wallet (bKash-style) built as a full-stack, production-gr
    ```bash
    cd client && npm ci && npm run dev
    ```
-7. Open <http://localhost:5173>. You should see **API status: ok**.
+7. Open <http://localhost:5173>. You should see the login page; tap a **Try the demo** button
+   (for example **Customer (Rahim)**) to log in to a [demo account](#demo-accounts).
+
+### Use it on a phone
+The app is designed for a phone. To try it on yours (on the same Wi-Fi as the computer):
+1. Start the API as above (step 5).
+2. In `client/`, run `npm run dev:phone` instead of `npm run dev`. Vite prints a **Network** URL
+   such as `http://192.168.0.12:5173`.
+3. Open that URL on the phone in **Samsung Internet** (or Firefox). Chrome's "always use secure
+   connections" setting blocks plain-HTTP LAN addresses.
+
+The API needs no extra setup: the dev server forwards `/api` and `/uploads` to it, so the phone
+sees a single origin and the login cookie works.
 
 ### Try the auth flow with curl
 With the API running (step 5). Uses fake data; never upload a real NID. Any three JPEG photos
@@ -173,7 +190,12 @@ by ৳1,00,000, and the agent cashes in ৳10,000 to Rahim and ৳5,000 to Karim
 | `server/` | `npm run typecheck` | Type-check with `tsc` |
 | `server/` | `npm run db:seed` | Create system wallets, rules and demo accounts (safe to re-run) |
 | `server/` | `npm run ledger:check` | Prove the ledger balances (exit code 1 if it doesn't) |
+| `client/` | `npm run dev` | Start the web app on `http://localhost:5173` |
+| `client/` | `npm run dev:phone` | The same, also reachable from a phone on your Wi-Fi |
+| `client/` | `npm test` | Run the client tests (Vitest + Testing Library + MSW) |
+| `client/` | `npm run typecheck` | Type-check with `tsc` |
 | `client/` | `npm run build` | Type-check and build for production |
 | `client/` | `npm run lint` | Lint with oxlint |
+| repo root | `node design/check-tokens.mjs` | Find any colour, size or spacing that isn't a design token |
 | repo root | `docker compose down` | Stop the database (data is kept) |
 | repo root | `docker compose down -v` | Stop the database **and delete its data** |

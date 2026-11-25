@@ -78,8 +78,9 @@ export const completeRegistrationBody = z
   // Only merchants have a shop: drop a stray shopName so it can never reach the users table.
   .transform(({ shopName, ...rest }) => (rest.role === 'MERCHANT' ? { ...rest, shopName } : rest));
 
-// Weak-PIN rules aren't applied at login: an existing PIN is checked against its hash, not judged.
-export const loginBody = z.object({
-  phone: phoneSchema,
-  pin: asciiDigits(z.string().regex(/^\d{5}$/, 'PIN must be exactly 5 digits')),
-});
+// Weak-PIN rules aren't applied to an existing PIN: it is checked against its hash, not judged.
+const existingPinSchema = asciiDigits(z.string().regex(/^\d{5}$/, 'PIN must be exactly 5 digits'));
+
+export const loginBody = z.object({ phone: phoneSchema, pin: existingPinSchema });
+
+export const changePinBody = z.object({ currentPin: existingPinSchema, newPin: pinSchema });

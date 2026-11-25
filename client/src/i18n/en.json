@@ -1,0 +1,280 @@
+{
+  "login": {
+    "title": "Log in",
+    "phone": "Phone number",
+    "pin": "PIN",
+    "submit": "Log in",
+    "noAccount": "New to PocketPay?",
+    "register": "Sign up",
+    "demo": {
+      "title": "Try the demo",
+      "hint": "One tap logs you in to a sample account.",
+      "CUSTOMER": "Customer (Rahim)",
+      "AGENT": "Agent",
+      "MERCHANT": "Merchant",
+      "ADMIN": "Admin"
+    }
+  },
+  "flows": {
+    "SEND_MONEY": {
+      "title": "Send Money",
+      "receiver": "Receiver's number"
+    },
+    "CASH_OUT": {
+      "title": "Cash Out",
+      "receiver": "Agent's number"
+    },
+    "PAYMENT": {
+      "title": "Payment",
+      "receiver": "Merchant's number"
+    },
+    "CASH_IN": {
+      "title": "Cash In",
+      "receiver": "Customer's number"
+    },
+    "FLOAT_TOPUP": {
+      "title": "Float top-up"
+    }
+  },
+  "common": {
+    "back": "Back",
+    "logout": "Log out"
+  },
+  "language": {
+    "label": "Language",
+    "en": "English",
+    "bn": "বাংলা"
+  },
+  "nav": {
+    "label": "Main",
+    "home": "Home",
+    "history": "History",
+    "profile": "Profile"
+  },
+  "amount": {
+    "invalid": "Enter an amount like 500 or 1,500.50."
+  },
+  "imagePicker": {
+    "choose": "Take or choose a photo",
+    "retake": "Retake"
+  },
+  "kyc": {
+    "pending": {
+      "title": "Your account is under review",
+      "body": "You can look around. Sending and receiving money unlocks once your documents are approved."
+    },
+    "rejected": {
+      "title": "Your documents were not approved",
+      "body": "Money actions are off. Please contact support."
+    },
+    "demo": "Demo app: do not upload a real NID. Any photo works."
+  },
+  "app": {
+    "name": "PocketPay"
+  },
+  "roles": {
+    "CUSTOMER": "Customer",
+    "AGENT": "Agent",
+    "MERCHANT": "Merchant",
+    "ADMIN": "Admin"
+  },
+  "admin": {
+    "title": "Admin",
+    "comingSoon": "The admin panel arrives in Phase 7.",
+    "comingSoonBody": "You're logged in as an admin. Reviewing KYC, fees and limits comes next."
+  },
+  "register": {
+    "title": "Sign up",
+    "progress": "Step {{step, number}} of {{total, number}}",
+    "haveAccount": "Already have an account?",
+    "login": "Log in",
+    "phone": {
+      "heading": "Your phone number",
+      "hint": "We'll send a 6-digit code to this number.",
+      "label": "Phone number",
+      "submit": "Send code"
+    },
+    "otp": {
+      "heading": "Enter the code",
+      "sentTo": "We sent it to {{phone}}.",
+      "label": "6-digit code",
+      "devHint": "Demo mode, no SMS is sent. Your code is {{code}}.",
+      "submit": "Verify",
+      "resend": "Resend code",
+      "resendIn": "Resend code in {{seconds, number}} s"
+    },
+    "identity": {
+      "heading": "About you",
+      "name": "Full name",
+      "dob": "Date of birth",
+      "nid": "NID number",
+      "role": "Account type",
+      "shopName": "Shop name",
+      "submit": "Next"
+    },
+    "photos": {
+      "heading": "Photos and PIN",
+      "nidFront": "NID front",
+      "nidBack": "NID back",
+      "selfie": "Selfie",
+      "pin": "Choose a 5-digit PIN",
+      "confirmPin": "Type the PIN again",
+      "submit": "Create account"
+    }
+  },
+  "validation": {
+    "phone": "Enter an 11-digit number like 01712345678.",
+    "pin": "Enter your 5-digit PIN.",
+    "pinWeak": "Don't use one digit repeated (11111) or a run (12345).",
+    "pinMismatch": "The two PINs don't match.",
+    "otp": "Enter the 6-digit code.",
+    "name": "Enter your full name (2 to 60 characters).",
+    "dob": "Enter a real date of birth.",
+    "under18": "You must be at least 18 years old.",
+    "nid": "Enter your 10-digit NID number.",
+    "shopName": "Enter your shop name (2 to 80 characters).",
+    "photo": "Add this photo."
+  },
+  "errors": {
+    "GENERIC": "Something went wrong. Please try again.",
+    "NETWORK_ERROR": "No connection. Check your internet and try again.",
+    "VALIDATION_ERROR": "Please check the details you entered.",
+    "PHONE_TAKEN": "This number already has an account. Log in instead.",
+    "NID_TAKEN": "This NID is already registered.",
+    "OTP_COOLDOWN": "Please wait a little before asking for a new code.",
+    "OTP_INVALID": "That code is not right.",
+    "OTP_EXPIRED": "This code has expired. Ask for a new one.",
+    "OTP_LOCKED": "Too many wrong codes. Ask for a new one.",
+    "OTP_SEND_FAILED": "We couldn't send the code. Try again.",
+    "REGISTRATION_TOKEN_INVALID": "Your sign-up has timed out. Please start again.",
+    "MISSING_FILE": "A photo is missing.",
+    "UPLOAD_FAILED": "The upload failed. Try again.",
+    "FILE_TOO_LARGE": "This image is too large. Choose a smaller photo.",
+    "UNSUPPORTED_FILE_TYPE": "Use a JPEG, PNG or WebP image.",
+    "INVALID_CREDENTIALS": "Wrong phone number or PIN.",
+    "ACCOUNT_LOCKED": "Too many wrong PINs. Your account is locked for now.",
+    "INVALID_PIN": "Wrong PIN.",
+    "PIN_UNCHANGED": "Your new PIN must be different from the current one.",
+    "ACCOUNT_FROZEN": "This account is frozen. Please contact support.",
+    "UNAUTHENTICATED": "Please log in again.",
+    "FORBIDDEN": "You can't do this.",
+    "REFRESH_TOKEN_INVALID": "Your session has ended. Please log in again.",
+    "REFRESH_IN_PROGRESS": "Please try again.",
+    "RATE_LIMITED": "Too many tries. Wait a little and try again.",
+    "IDEMPOTENCY_KEY_REQUIRED": "Something went wrong. Please try again.",
+    "ACCOUNT_NOT_ACTIVE": "Your account isn't active yet, so you can't move money.",
+    "RECEIVER_NOT_FOUND": "There is no account with this number.",
+    "CANNOT_SEND_TO_SELF": "You can't send money to yourself.",
+    "INVALID_RECEIVER": "This number can't receive this kind of transaction.",
+    "RECEIVER_NOT_ACTIVE": "This account can't receive money right now.",
+    "AMOUNT_BELOW_MINIMUM": "The amount is below the minimum.",
+    "AMOUNT_ABOVE_MAXIMUM": "The amount is above the maximum.",
+    "LIMIT_EXCEEDED": "This would go over your limit.",
+    "RECEIVER_LIMIT_EXCEEDED": "The receiver's limit is used up.",
+    "RECEIVER_BALANCE_LIMIT": "The receiver's balance would go over its limit.",
+    "INSUFFICIENT_BALANCE": "Not enough balance for the amount and the fee.",
+    "IDEMPOTENCY_KEY_REUSED": "This request was already used for another transaction. Start a new one.",
+    "TRANSACTION_NOT_FOUND": "Transaction not found.",
+    "WALLET_NOT_FOUND": "Wallet not found.",
+    "INVALID_JSON": "Something went wrong. Please try again.",
+    "PAYLOAD_TOO_LARGE": "This is too large to send.",
+    "NOT_FOUND": "Not found.",
+    "INTERNAL_ERROR": "Something went wrong on our side. Please try again.",
+    "INVALID_CREDENTIALS_attempts_one": "Wrong phone number or PIN. {{count, number}} attempt left before your account locks.",
+    "INVALID_CREDENTIALS_attempts_other": "Wrong phone number or PIN. {{count, number}} attempts left before your account locks.",
+    "INVALID_PIN_attempts_one": "Wrong PIN. {{count, number}} attempt left before your account locks.",
+    "INVALID_PIN_attempts_other": "Wrong PIN. {{count, number}} attempts left before your account locks.",
+    "OTP_INVALID_attempts_one": "That code is not right. {{count, number}} attempt left.",
+    "OTP_INVALID_attempts_other": "That code is not right. {{count, number}} attempts left.",
+    "ACCOUNT_LOCKED_until": "Too many wrong PINs. Your account is locked until {{until, dhakaTime}}.",
+    "LIMIT_EXCEEDED_DAY_AMOUNT": "This would go over your daily limit of {{limit, taka}}. Used today: {{used, taka}}.",
+    "LIMIT_EXCEEDED_MONTH_AMOUNT": "This would go over your monthly limit of {{limit, taka}}. Used this month: {{used, taka}}.",
+    "LIMIT_EXCEEDED_DAY_COUNT": "You've reached today's limit of {{limit, number}} transactions.",
+    "LIMIT_EXCEEDED_MONTH_COUNT": "You've reached this month's limit of {{limit, number}} transactions."
+  },
+  "home": {
+    "balance": "Balance",
+    "showBalance": "Show balance",
+    "recent": "Recent transactions",
+    "seeAll": "See all",
+    "empty": "No transactions yet",
+    "emptyBody": "Money you send or receive shows up here.",
+    "eMoney": "E-money balance"
+  },
+  "transfer": {
+    "amount": "Amount",
+    "note": "Note (optional)",
+    "next": "Next",
+    "wrongRole": {
+      "CUSTOMER": "Enter a customer's number.",
+      "AGENT": "Enter an agent's number.",
+      "MERCHANT": "Enter a merchant's number."
+    },
+    "from": "From",
+    "to": "To",
+    "fee": "Fee",
+    "total": "Total",
+    "pin": "Enter your PIN",
+    "confirm": "Confirm",
+    "tryAgain": "Try again",
+    "success": "Successful",
+    "trxId": "TrxID",
+    "balanceAfter": "New balance",
+    "time": "Time",
+    "done": "Done",
+    "share": "Share",
+    "copied": "TrxID copied.",
+    "copyByHand": "Copy it by hand: {{trxId}}",
+    "shareText": "PocketPay TrxID: {{trxId}}"
+  },
+  "history": {
+    "type": "Type",
+    "all": "All types",
+    "from": "From date",
+    "to": "To date",
+    "loadMore": "Load more",
+    "empty": "No transactions found",
+    "emptyBody": "Money you send or receive shows up here. Try another type or date range."
+  },
+  "receipt": {
+    "title": "Receipt",
+    "notFound": "Transaction not found",
+    "notFoundBody": "It doesn't exist, or it isn't one of yours.",
+    "backToHistory": "Back to history"
+  },
+  "merchant": {
+    "yourNumber": "Your number for payments",
+    "yourNumberHint": "Customers pay you by choosing Payment and entering this number."
+  },
+  "profile": {
+    "photo": "Profile photo",
+    "nid": "NID",
+    "role": "Account type",
+    "shopName": "Shop name",
+    "status": "Account status",
+    "kyc": "Document check",
+    "changePhoto": "Change photo",
+    "photoChanged": "Photo updated.",
+    "changePin": "Change PIN"
+  },
+  "status": {
+    "PENDING_KYC": "Under review",
+    "ACTIVE": "Active",
+    "FROZEN": "Frozen",
+    "REJECTED": "Not approved"
+  },
+  "kycStatus": {
+    "PENDING": "Pending",
+    "APPROVED": "Approved",
+    "REJECTED": "Not approved",
+    "NONE": "Not submitted"
+  },
+  "changePin": {
+    "title": "Change PIN",
+    "current": "Current PIN",
+    "new": "New PIN",
+    "confirm": "Type the new PIN again",
+    "submit": "Change PIN",
+    "done": "PIN changed. Your other devices were logged out."
+  }
+}

@@ -9,7 +9,7 @@ import { MemoryStorage } from '../src/lib/storage/memory';
 import { verifyPin } from '../src/modules/auth/pin';
 import { verifyAccessToken } from '../src/modules/auth/tokens';
 import { resetDb } from './helpers/db';
-import { isWebp, testJpeg } from './helpers/images';
+import { bigPng, isWebp, testJpeg } from './helpers/images';
 
 const PHONE = '01712345678';
 const NID = '1234567890';
@@ -361,10 +361,17 @@ describe('POST /auth/register/complete', () => {
     expect(storage.objects.size).toBe(0);
   });
 
-  it('rejects an image over 2 MB', async () => {
+  it('accepts a 9 MB image (the limit is 10 MB per image)', async () => {
+    const app = makeApp();
+    const res = await complete(app, await registerToToken(app), { files: { nidFront: await bigPng() } });
+
+    expect(res.status).toBe(201);
+  });
+
+  it('rejects an 11 MB image (over the 10 MB limit)', async () => {
     const app = makeApp();
     const res = await complete(app, await registerToToken(app), {
-      files: { nidFront: Buffer.alloc(3 * 1024 * 1024) },
+      files: { nidFront: Buffer.alloc(11 * 1024 * 1024) },
     });
 
     expect(res.status).toBe(413);
@@ -391,9 +398,9 @@ describe('POST /auth/register/complete', () => {
   });
 
   it('checks the token before reading the upload', async () => {
-    // A 3 MB file would be 413 if the upload were parsed first; 401 proves auth runs first.
+    // An 11 MB file would be 413 if the upload were parsed first; 401 proves auth runs first.
     const res = await complete(makeApp(), null, {
-      files: { nidFront: Buffer.alloc(3 * 1024 * 1024) },
+      files: { nidFront: Buffer.alloc(11 * 1024 * 1024) },
     });
 
     expect(res.status).toBe(401);

@@ -1,10 +1,11 @@
 import { Router, type RequestHandler } from 'express';
-import { bearerToken } from '../../middlewares/auth';
-import { loginLimiter, otpLimiter } from '../../middlewares/rateLimit';
+import { bearerToken, requireAuth } from '../../middlewares/auth';
+import { loginLimiter, otpLimiter, pinChangeLimiter } from '../../middlewares/rateLimit';
 import { uploadKycImages } from '../../middlewares/upload';
 import { validateBody } from '../../middlewares/validate';
 import { createAuthController, type AuthDeps } from './auth.controller';
 import {
+  changePinBody,
   completeRegistrationBody,
   loginBody,
   requestOtpBody,
@@ -29,7 +30,7 @@ export function createAuthRouter(deps: AuthDeps): Router {
     auth.requestOtp,
   );
   router.post('/register/verify-otp', validateBody(verifyOtpBody), auth.verifyOtp);
-  // Token first: a cheap check that rejects strangers before multer buffers up to 3 × 2 MB.
+  // Token first: a cheap check that rejects strangers before multer buffers up to 3 × 10 MB.
   router.post(
     '/register/complete',
     requireRegistrationToken,
@@ -42,6 +43,8 @@ export function createAuthRouter(deps: AuthDeps): Router {
   // Both read the pp_rt cookie, which is path-scoped to /api/v1/auth.
   router.post('/refresh', auth.refresh);
   router.post('/logout', auth.logout);
+
+  router.patch('/pin', requireAuth, pinChangeLimiter, validateBody(changePinBody), auth.changePin);
 
   return router;
 }

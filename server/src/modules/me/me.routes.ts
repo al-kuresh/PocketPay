@@ -2,6 +2,9 @@ import { Router } from 'express';
 import { prisma } from '../../lib/prisma';
 import type { StorageProvider } from '../../lib/storage';
 import { requireAuth } from '../../middlewares/auth';
+import { photoUploadLimiter } from '../../middlewares/rateLimit';
+import { uploadProfilePhoto } from '../../middlewares/upload';
+import { changeProfilePhoto } from './photo.service';
 import { toPublicUser } from '../auth/user.presenter';
 import { toPublicWallet } from '../wallets/wallet.presenter';
 import { AppError } from '../../utils/AppError';
@@ -27,6 +30,20 @@ export function createMeRouter(deps: { storage: StorageProvider }): Router {
         wallet: user.wallet ? toPublicWallet(user.wallet) : null,
       },
     });
+  });
+
+  // PUT /api/v1/me/photo → a new public profile photo. Token and the per-user limit first: they
+  // reject before multer buffers up to 10 MB.
+  router.put('/photo', requireAuth, photoUploadLimiter, uploadProfilePhoto, async (req, res) => {
+    if (!req.file) {
+      throw new AppError(400, 'MISSING_FILE', 'Please upload the photo image', { field: 'photo' });
+    }
+    const user = await changeProfilePhoto({
+      userId: req.user!.id,
+      image: req.file.buffer,
+      storage: deps.storage,
+    });
+    res.json({ success: true, data: { user } });
   });
 
   return router;

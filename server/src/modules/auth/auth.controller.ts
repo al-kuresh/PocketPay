@@ -4,7 +4,7 @@ import type { StorageProvider } from '../../lib/storage';
 import { AppError } from '../../utils/AppError';
 import { requestOtp, verifyOtp } from './otp.service';
 import { completeRegistration, type KycImages } from './registration.service';
-import { login, logout, refreshSession } from './session.service';
+import { changePin, login, logout, refreshSession } from './session.service';
 import {
   clearRefreshCookie,
   REFRESH_COOKIE,
@@ -100,7 +100,20 @@ export function createAuthController(deps: AuthDeps) {
     res.status(204).end();
   };
 
+  const changePinHandler: RequestHandler = async (req, res) => {
+    await changePin({
+      userId: req.user!.id,
+      currentPin: req.body.currentPin,
+      newPin: req.body.newPin,
+      // Sent here because /auth/pin is under the cookie's /api/v1/auth path.
+      rawRefreshToken: refreshCookieValue(req),
+      meta: requestMeta(req),
+    });
+    res.status(204).end();
+  };
+
   return {
+    changePin: changePinHandler,
     requestOtp: requestOtpHandler,
     verifyOtp: verifyOtpHandler,
     complete: completeHandler,
