@@ -1,4 +1,6 @@
-# PocketPay API (v1): auth
+# PocketPay API (v1)
+
+Auth, registration and sessions; wallets, money flows, history and receipts.
 
 Base URL: `http://localhost:4000/api/v1` in local dev. Every example uses **fake data**
 (phone `01700000000`, NID `1234567890`). Never send a real NID to a demo server.
@@ -28,12 +30,17 @@ the server converts Bangla to ASCII before validating.
 The three token types are not interchangeable: a registration token used as an access token
 gets `401 UNAUTHENTICATED`.
 
-**Rate limits** (per client IP, `RateLimit` / `RateLimit-Policy` headers, draft-8):
+**Rate limits** (`RateLimit` / `RateLimit-Policy` headers, draft-8):
 
-| Endpoint | Limit |
-|---|---|
-| `POST /auth/register/request-otp` | 5 per 15 minutes |
-| `POST /auth/login` | 10 per 15 minutes |
+| Endpoint | Limit | Counted per |
+|---|---|---|
+| `POST /auth/register/request-otp` | 5 per 15 minutes | client IP |
+| `POST /auth/login` | 10 per 15 minutes | client IP |
+| the 4 money POSTs + `POST /transactions/preview` | 30 per minute, one budget for all five | **user** |
+| `GET /wallets/lookup` | 30 per minute | **user** |
+
+The money and lookup limits count per signed-in user, not per IP: on Bangladeshi mobile
+networks many phones share one IP (CGNAT).
 
 Over the limit: `429 RATE_LIMITED`.
 
@@ -57,8 +64,8 @@ hash or the date of birth.
 ```
 
 - `role`: `CUSTOMER` · `AGENT` · `MERCHANT` · `ADMIN`
-- `status`: `PENDING_KYC` · `ACTIVE` · `FROZEN` · `REJECTED`. Only `ACTIVE` accounts will be
-  able to move money (Phase 5).
+- `status`: `PENDING_KYC` · `ACTIVE` · `FROZEN` · `REJECTED`. Only `ACTIVE` accounts can send or
+  receive money.
 - `kycStatus`: status of the latest KYC submission (`PENDING` · `APPROVED` · `REJECTED`), or `null`.
 - `shopName`: merchants only, otherwise `null`.
 
@@ -248,6 +255,231 @@ Login, refresh and registration responses don't include the wallet.
 
 ---
 
+## Money
+
+All endpoints below need `Authorization: Bearer <accessToken>`. Examples use the
+[demo accounts](../README.md#demo-accounts): Rahim (`01800000002`, ৳10,000), Karim (`01800000003`),
+Demo Agent (`01800000004`), Demo Store (`01800000005`).
+
+**Money is poisha as a string**, in requests and responses: `"50000"` is ৳500.00. A request
+`amount` is 1–15 digits and > 0; `"15.50"`, `500` (a number) or `"-5"` → `400 VALIDATION_ERROR`.
+
+**People are shown masked** (`"Karim H***"`), merchants by their **shop name**, and system
+wallets as `PocketPay`. A response never contains a full name, an NID or a PIN hash. A **party**:
+
+```json
+{ "name": "Karim H***", "phone": "01800000003", "role": "CUSTOMER" }
+```
+
+`role` is `CUSTOMER` · `AGENT` · `MERCHANT`, or `SYSTEM` (then `phone` is `null`).
+
+### The 4 money POSTs
+
+| Endpoint | Who may call it | Receiver | Fee (seed) | Who pays it |
+|---|---|---|---|---|
+| `POST /transactions/send-money` | CUSTOMER | a CUSTOMER | ৳5 above ৳100 | sender |
+| `POST /transactions/cash-out` | CUSTOMER | an AGENT | 1.85% (agent gets 0.40% of it) | sender |
+| `POST /transactions/payment` | CUSTOMER | a MERCHANT | 0 (configurable) | **merchant**: deducted from its credit |
+| `POST /transactions/cash-in` | AGENT | a CUSTOMER | 0 | sender |
+
+**Headers:** `Authorization: Bearer <accessToken>` and **`Idempotency-Key: <UUID>`**.
+**Rate limit:** 30 / min per user (shared with preview).
+
+The `Idempotency-Key` is a new UUID for each transaction the user confirms. Sending the same
+request again with the same key (a double tap, a timeout, a retry) **doesn't pay twice**: it
+returns the original transaction with `200` and `replayed: true`. The same key with a
+different amount, type or receiver → `409 IDEMPOTENCY_KEY_REUSED`.
+
+**Body**
+
+| Field | Rules |
+|---|---|
+| `receiverPhone` | `01XXXXXXXXX` (Bangla digits accepted) |
+| `amount` | poisha as a digit string, > 0 |
+| `pin` | the user's 5-digit PIN (Bangla digits accepted) |
+| `note` | optional, trimmed, 1–50 characters |
+
+```bash
+curl -s -X POST $API/transactions/send-money \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: 3f8b6c2e-1d4a-4b7e-9c3f-2a1b0c9d8e7f" \
+  -d '{"receiverPhone":"01800000003","amount":"50000","pin":"48213","note":"rent"}'
+```
+
+**201** a new transaction · **200** the same key again (`"replayed": true`, same receipt)
+
+```json
+{
+  "success": true,
+  "data": {
+    "replayed": false,
+    "receipt": {
+      "trxId": "PP7K2M9QXA",
+      "type": "SEND_MONEY",
+      "status": "COMPLETED",
+      "amount": "50000",
+      "fee": "500",
+      "note": "rent",
+      "createdAt": "2026-11-25T04:12:09.512Z",
+      "from": { "name": "Rahim U***", "phone": "01800000002", "role": "CUSTOMER" },
+      "to": { "name": "Karim H***", "phone": "01800000003", "role": "CUSTOMER" },
+      "mine": { "amount": "-50500", "balanceAfter": "949500" }
+    }
+  }
+}
+```
+
+- `amount` is what the receiver is sent; `fee` is the whole fee (on a Cash Out it includes the
+  agent's commission).
+- `mine` is the **caller's own** ledger entry: signed (`-` out, `+` in) and the balance after it.
+  On a Cash Out of ৳1,000 the customer's `mine.amount` is `"-101850"`; on a ৳250 payment with a
+  1% merchant fee, the merchant would see `"24750"`.
+
+**Order of checks.** The receiver and the amount are checked **before** the PIN, so a typo in
+the phone or the amount never costs a PIN attempt:
+
+1. body and `Idempotency-Key` → `400 VALIDATION_ERROR`, `400 IDEMPOTENCY_KEY_REQUIRED`
+2. the caller: role → `403 FORBIDDEN`; status → `403 ACCOUNT_NOT_ACTIVE`
+3. the receiver → `404 RECEIVER_NOT_FOUND`, `422 CANNOT_SEND_TO_SELF`, `422 INVALID_RECEIVER`, `422 RECEIVER_NOT_ACTIVE`
+4. the amount → `422 AMOUNT_BELOW_MINIMUM`, `422 AMOUNT_ABOVE_MAXIMUM`
+5. the PIN → `403 INVALID_PIN`, `423 ACCOUNT_LOCKED` (the same 3-strike lockout as login)
+6. under the wallet locks → `403 ACCOUNT_NOT_ACTIVE` / `422 RECEIVER_NOT_ACTIVE` (a freeze since
+   step 2), `422 LIMIT_EXCEEDED`, `422 RECEIVER_BALANCE_LIMIT`, `422 INSUFFICIENT_BALANCE`
+
+A replay runs steps 1–5 again, then returns the original transaction (step 6 is skipped). So a
+replay after the receiver was frozen gets `422 RECEIVER_NOT_ACTIVE` rather than the receipt.
+
+### `POST /transactions/preview`
+
+The fee and total before the PIN screen. Runs every check above except the PIN, without
+locking anything, plus a balance check. **Who:** CUSTOMER or AGENT (for the flows their role
+can start). **Rate limit:** shared with the money POSTs. **No `Idempotency-Key`**: nothing is written.
+
+```json
+{ "type": "SEND_MONEY", "receiverPhone": "01800000003", "amount": "50000" }
+```
+
+`type`: `SEND_MONEY` · `CASH_OUT` · `PAYMENT` · `CASH_IN`.
+
+**200**
+
+```json
+{
+  "success": true,
+  "data": {
+    "type": "SEND_MONEY",
+    "amount": "50000",
+    "fee": "500",
+    "total": "50500",
+    "receiver": { "name": "Karim H***", "phone": "01800000003", "role": "CUSTOMER" }
+  }
+}
+```
+
+`total` is what leaves the sender's wallet (on a Payment it equals `amount`: the merchant pays
+the fee). A preview is informative only: a parallel request can still change the outcome, and
+only the money POST's own checks are binding.
+
+Errors: the same as the money POSTs, except the PIN, `Idempotency-Key` and replay ones. A
+`type` the caller's role can't start (an agent previewing `SEND_MONEY`) → `403 FORBIDDEN`.
+
+### `GET /wallets/lookup?phone=`
+
+Who is behind a phone number, before sending to it. **Who:** CUSTOMER or AGENT.
+**Rate limit:** 30 / min per user (slows down phone-number enumeration).
+
+```bash
+curl -s "$API/wallets/lookup?phone=01800000003" -H "Authorization: Bearer $TOKEN"
+```
+
+**200**: only the name and role; the caller already has the phone.
+
+```json
+{ "success": true, "data": { "name": "Karim H***", "role": "CUSTOMER" } }
+```
+
+A merchant → `{ "name": "Demo Store", "role": "MERCHANT" }` (its shop name).
+
+| Error | When |
+|---|---|
+| `400 VALIDATION_ERROR` | `phone` missing or not `01XXXXXXXXX` |
+| `404 RECEIVER_NOT_FOUND` | no account with this phone, **or an admin's phone** (answered the same) |
+| `403 FORBIDDEN` | the caller is a merchant or an admin |
+
+### `GET /transactions`
+
+The caller's own history, newest first. **Who:** any signed-in user (an admin, who has no
+wallet, gets an empty list).
+
+| Query | Rules |
+|---|---|
+| `type` | optional: `SEND_MONEY` · `CASH_IN` · `CASH_OUT` · `PAYMENT` · `FLOAT_TOPUP` |
+| `from`, `to` | optional `YYYY-MM-DD` dates in **Asia/Dhaka**, both **inclusive** |
+| `cursor` | optional: the `nextCursor` of the previous page |
+| `limit` | 1–50, default 20 |
+
+```bash
+curl -s "$API/transactions?limit=2" -H "Authorization: Bearer $TOKEN"
+```
+
+**200**
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "trxId": "PP7K2M9QXA",
+        "type": "SEND_MONEY",
+        "direction": "OUT",
+        "amount": "50500",
+        "counterparty": { "name": "Karim H***", "phone": "01800000003", "role": "CUSTOMER" },
+        "balanceAfter": "949500",
+        "createdAt": "2026-11-25T04:12:09.512Z"
+      },
+      {
+        "trxId": "PPM3W8R2NE",
+        "type": "CASH_IN",
+        "direction": "IN",
+        "amount": "1000000",
+        "counterparty": { "name": "Demo A***", "phone": "01800000004", "role": "AGENT" },
+        "balanceAfter": "1000000",
+        "createdAt": "2026-11-24T10:03:41.118Z"
+      }
+    ],
+    "nextCursor": "17"
+  }
+}
+```
+
+- `amount` is what **the caller's** balance changed by (no sign; `direction` says which way). The
+  sender of ৳500 sees `"50500"` (with the fee), the receiver `"50000"`.
+- `counterparty` is the other side: for the sender, the receiver; for anyone credited, the
+  sender. A float top-up comes from `{ "name": "PocketPay", "phone": null, "role": "SYSTEM" }`.
+- **Next page:** pass `nextCursor` back as `cursor`. It is `null` on the last page. Pages are cut
+  on the ledger order, so a transaction made while paging never shifts, repeats or skips items.
+
+| Error | When |
+|---|---|
+| `400 VALIDATION_ERROR` | a bad `type`, `cursor`, `limit` or date (`2026-02-30`, `24-11-2026`) |
+
+### `GET /transactions/:trxId`
+
+One receipt, as the caller sees it (the same shape as `data.receipt` above; `mine` is the
+caller's own entry). **Who:** a user whose wallet is part of the transaction.
+
+```bash
+curl -s $API/transactions/PP7K2M9QXA -H "Authorization: Bearer $TOKEN"
+```
+
+| Error | When |
+|---|---|
+| `400 VALIDATION_ERROR` | not a trxId (`PP` + 8 of `ABCDEFGHJKMNPQRSTUVWXYZ23456789`) |
+| `404 TRANSACTION_NOT_FOUND` | no such transaction, **or the caller's wallet isn't in it**: the answer is the same, so nobody can probe other people's trxIds |
+
+---
+
 ## Error codes
 
 Every code the auth endpoints return:
@@ -276,14 +508,27 @@ Every code the auth endpoints return:
 | `REFRESH_IN_PROGRESS` | 409 | | **yes, once** (with the new cookie) |
 | `RATE_LIMITED` | 429 | | later (see the `RateLimit` header) |
 
-Money codes. The ledger engine (Phase 4) already raises these; the money endpoints that return
-them arrive in Phase 5:
+Money codes (the money POSTs, preview, lookup, history and receipts). The auth codes above that
+also appear here mean the same: `ACCOUNT_LOCKED` (423, shared lockout with login), `FORBIDDEN`,
+`UNAUTHENTICATED`, `VALIDATION_ERROR`, `RATE_LIMITED`.
 
 | Code | HTTP | Details | Retry? |
 |---|---|---|---|
-| `INSUFFICIENT_BALANCE` | 422 | | no: the wallet doesn't have enough money |
-| `WALLET_NOT_FOUND` | 404 | | no |
-| `IDEMPOTENCY_KEY_REUSED` | 409 | | no: the same request key was already used for a different transaction (type, amount or receiver). Use a new key for a new transaction |
+| `IDEMPOTENCY_KEY_REQUIRED` | 400 | | add an `Idempotency-Key` header with a UUID |
+| `ACCOUNT_NOT_ACTIVE` | 403 | `{ status }` (`PENDING_KYC`, `FROZEN`, `REJECTED`) | no: wait for KYC approval or contact support |
+| `INVALID_PIN` | 403 | `{ attemptsLeft }` | with the right PIN (3 wrong PINs → `ACCOUNT_LOCKED`) |
+| `RECEIVER_NOT_FOUND` | 404 | | with the right phone |
+| `CANNOT_SEND_TO_SELF` | 422 | | no |
+| `INVALID_RECEIVER` | 422 | `{ expectedRole }` | to an account of that role |
+| `RECEIVER_NOT_ACTIVE` | 422 | | no: the receiver can't take money right now |
+| `AMOUNT_BELOW_MINIMUM` | 422 | `{ min }` (poisha) | with a larger amount. Also: a payment whose merchant fee would be ≥ the amount |
+| `AMOUNT_ABOVE_MAXIMUM` | 422 | `{ max }` (poisha) | with a smaller amount |
+| `LIMIT_EXCEEDED` | 422 | `{ period: "DAY"\|"MONTH", kind: "COUNT"\|"AMOUNT", limit, used }`, all strings (poisha for `AMOUNT`) | tomorrow / next month (Asia/Dhaka), or a smaller amount |
+| `RECEIVER_BALANCE_LIMIT` | 422 | | no: the receiving customer would go over ৳5,00,000 |
+| `INSUFFICIENT_BALANCE` | 422 | | no: the wallet doesn't have enough money (amount + fee) |
+| `IDEMPOTENCY_KEY_REUSED` | 409 | | no: the key was already used for a different transaction (type, amount or receiver). Use a new key for a new transaction |
+| `TRANSACTION_NOT_FOUND` | 404 | | no |
+| `WALLET_NOT_FOUND` | 404 | | no (an internal ledger check; not expected from these endpoints) |
 
 Codes any endpoint can return:
 
@@ -303,7 +548,5 @@ Planned in [design.md §9](design.md#9-api-v1), not implemented yet:
 | Group | Endpoints | Phase |
 |---|---|---|
 | Account | `PATCH /auth/pin` (change PIN), `PUT /me/photo` (replace profile photo) | 6 (with the Profile screen) |
-| Wallet | `GET /wallets/lookup?phone=` | 5 |
-| Transactions | `POST /transactions/preview`, `/send-money`, `/cash-out`, `/payment`, `/cash-in`; `GET /transactions`, `GET /transactions/:trxId` | 5 |
 | KYC | `GET /kyc`, `POST /kyc/resubmit` | 7 |
 | Admin | `/admin/stats`, `/admin/users`, `/admin/kyc`, `/admin/transactions`, `/admin/agents/:id/float`, `/admin/fees`, `/admin/limits`, `/admin/reconcile`, `/admin/audit-logs` | 7 |
