@@ -71,5 +71,14 @@ export function errorMessage(t: TFunction, err: unknown): string {
   if (err.code === 'ACCOUNT_LOCKED' && typeof details.lockedUntil === 'string' && !Number.isNaN(Date.parse(details.lockedUntil))) {
     return t('errors.ACCOUNT_LOCKED_until', { until: details.lockedUntil })
   }
+  // { period: DAY|MONTH, kind: COUNT|AMOUNT, limit, used }: digit strings (poisha for AMOUNT)
+  if (
+    err.code === 'LIMIT_EXCEEDED' &&
+    (details.period === 'DAY' || details.period === 'MONTH') &&
+    (details.kind === 'COUNT' || details.kind === 'AMOUNT') &&
+    [details.limit, details.used].every((v) => typeof v === 'string' && /^\d+$/.test(v))
+  ) {
+    return t(`errors.LIMIT_EXCEEDED_${details.period}_${details.kind}`, { limit: details.limit, used: details.used })
+  }
   return t(`errors.${err.code}`)
 }

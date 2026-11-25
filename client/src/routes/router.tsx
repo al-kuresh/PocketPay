@@ -1,6 +1,9 @@
 import { createBrowserRouter, Navigate, type RouteObject } from 'react-router'
 import { Login } from '../pages/auth/Login'
 import { RegisterWizard } from '../pages/auth/register/RegisterWizard'
+import { CashOut } from '../pages/customer/CashOut'
+import { Payment } from '../pages/customer/Payment'
+import { SendMoney } from '../pages/customer/SendMoney'
 import { RequireActive, RequireAnonymous, RequireAuth, RequireRole } from './guards'
 import { Home, Page } from './placeholders'
 
@@ -22,9 +25,9 @@ export const routes: RouteObject[] = [
           {
             element: <RequireActive />,
             children: [
-              { path: 'send-money', element: <Page titleKey="flows.SEND_MONEY.title" /> },
-              { path: 'cash-out', element: <Page titleKey="flows.CASH_OUT.title" /> },
-              { path: 'payment', element: <Page titleKey="flows.PAYMENT.title" /> },
+              { path: 'send-money', element: <SendMoney /> },
+              { path: 'cash-out', element: <CashOut /> },
+              { path: 'payment', element: <Payment /> },
             ],
           },
         ],

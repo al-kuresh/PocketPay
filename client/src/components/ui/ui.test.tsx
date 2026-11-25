@@ -98,19 +98,19 @@ describe('AmountInput', () => {
     const { input, onAmountChange } = renderAmount()
     expect(screen.getByText('৳')).toBeInTheDocument()
     fireEvent.change(input, { target: { value: '1,500.50' } })
-    expect(onAmountChange).toHaveBeenLastCalledWith({ poisha: '150050', error: null })
+    expect(onAmountChange).toHaveBeenLastCalledWith({ text: '1,500.50', poisha: '150050', error: null })
   })
 
   it('accepts Bangla digits', () => {
     const { input, onAmountChange } = renderAmount()
     fireEvent.change(input, { target: { value: '১৫০০.৫০' } })
-    expect(onAmountChange).toHaveBeenLastCalledWith({ poisha: '150050', error: null })
+    expect(onAmountChange).toHaveBeenLastCalledWith({ text: '১৫০০.৫০', poisha: '150050', error: null })
   })
 
   it('"1.234" reports the error key and shows its message', () => {
     const { input, onAmountChange } = renderAmount()
     fireEvent.change(input, { target: { value: '1.234' } })
-    expect(onAmountChange).toHaveBeenLastCalledWith({ poisha: null, error: 'amount.invalid' })
+    expect(onAmountChange).toHaveBeenLastCalledWith({ text: '1.234', poisha: null, error: 'amount.invalid' })
     expect(screen.getByRole('alert')).toHaveTextContent(en.amount.invalid)
     expect(input).toHaveAttribute('aria-invalid', 'true')
   })
@@ -119,7 +119,7 @@ describe('AmountInput', () => {
     const { input, onAmountChange } = renderAmount()
     fireEvent.change(input, { target: { value: '5' } })
     fireEvent.change(input, { target: { value: '' } })
-    expect(onAmountChange).toHaveBeenLastCalledWith({ poisha: null, error: null })
+    expect(onAmountChange).toHaveBeenLastCalledWith({ text: '', poisha: null, error: null })
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })

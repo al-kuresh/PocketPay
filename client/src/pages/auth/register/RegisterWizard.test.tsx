@@ -1,10 +1,9 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../i18n/en.json'
-import { routes } from '../../../routes/router'
+import { renderRoutes } from '../../../test/render'
 import { useSession } from '../../../stores/session'
 import { apiError, readMultipart, server, testUser, type SentFile } from '../../../test/server'
 
@@ -45,11 +44,7 @@ beforeEach(() => {
 })
 afterEach(() => vi.restoreAllMocks())
 
-function visit() {
-  const router = createMemoryRouter(routes, { initialEntries: ['/register'] })
-  render(<RouterProvider router={router} />)
-  return { router, user: userEvent.setup() }
-}
+const visit = () => renderRoutes('/register')
 
 const photo = (name: string) => new File([new Uint8Array(1000)], name, { type: 'image/jpeg' })
 

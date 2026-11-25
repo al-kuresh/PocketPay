@@ -1,11 +1,10 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import bn from '../../i18n/bn.json'
 import en from '../../i18n/en.json'
-import { routes } from '../../routes/router'
+import { renderRoutes } from '../../test/render'
 import { useLanguage } from '../../stores/language'
 import { useSession } from '../../stores/session'
 import { apiError, server, testUser } from '../../test/server'
@@ -25,11 +24,7 @@ function loginAnswers(answer: PublicUser | [number, unknown]) {
   )
 }
 
-function visit(path = '/login') {
-  const router = createMemoryRouter(routes, { initialEntries: [path] })
-  render(<RouterProvider router={router} />)
-  return { router, user: userEvent.setup() }
-}
+const visit = (path = '/login') => renderRoutes(path)
 
 async function fillAndSubmit(user: ReturnType<typeof userEvent.setup>, phone: string, pin: string, t = en) {
   await user.type(screen.getByLabelText(t.login.phone), phone)
@@ -51,7 +46,7 @@ describe('Login', () => {
     loginAnswers(testUser({ role: 'CUSTOMER' }))
     const { router, user } = visit()
     await fillAndSubmit(user, '01800000002', '48213')
-    expect(await screen.findByRole('heading', { name: en.placeholder.home.CUSTOMER })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: en.nav.home })).toBeInTheDocument()
     expect(useSession.getState()).toMatchObject({ status: 'authenticated', accessToken: 'acc' })
     expect(router.state.location.pathname).toBe('/')
     expect(loginBodies).toEqual([{ phone: '01800000002', pin: '48213' }])
@@ -61,7 +56,7 @@ describe('Login', () => {
     loginAnswers(testUser())
     const { user } = visit()
     await fillAndSubmit(user, '০১৮০০০০০০০২', '৪৮২১৩')
-    await screen.findByRole('heading', { name: en.placeholder.home.CUSTOMER })
+    await screen.findByRole('heading', { name: en.nav.home })
     expect(loginBodies).toEqual([{ phone: '01800000002', pin: '48213' }])
   })
 

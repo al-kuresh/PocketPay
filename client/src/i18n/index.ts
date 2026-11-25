@@ -1,6 +1,7 @@
 import i18next from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import { formatDateTime } from '../lib/dates'
+import { formatTaka } from '../lib/money'
 import bn from './bn.json'
 import en from './en.json'
 
@@ -17,3 +18,5 @@ void i18n.use(initReactI18next).init({
 
 // "{{until, dhakaTime}}" in a message: an ISO time shown in Dhaka time, in the message's language.
 i18n.services.formatter?.add('dhakaTime', (value, lng) => formatDateTime(String(value), lng === 'bn' ? 'bn' : 'en'))
+// "{{limit, taka}}": a poisha string as ৳, in the message's language.
+i18n.services.formatter?.add('taka', (value, lng) => formatTaka(String(value), { lang: lng === 'bn' ? 'bn' : 'en' }))

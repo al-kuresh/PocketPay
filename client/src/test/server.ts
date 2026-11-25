@@ -1,8 +1,19 @@
+import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
 import type { PublicUser } from '../api/types'
+import { useSession } from '../stores/session'
 
-/** One MSW server for every test file; each test adds its own handlers with server.use(). */
-export const server = setupServer()
+/**
+ * One MSW server for every test file; each test adds its own handlers with server.use().
+ * The defaults answer what every home page loads (the signed-in user's wallet, an empty history), so a test that
+ * only passes through home doesn't have to mock it. Anything else unhandled is still an error.
+ */
+export const server = setupServer(
+  http.get('/api/v1/me', () =>
+    HttpResponse.json({ success: true, data: { user: useSession.getState().user, wallet: { id: 'w1', type: 'CUSTOMER', balance: '0' } } }),
+  ),
+  http.get('/api/v1/transactions', () => HttpResponse.json({ success: true, data: { items: [], nextCursor: null } })),
+)
 
 /** The API's error envelope, for MSW handlers. */
 export const apiError = (code: string, details?: unknown) => ({

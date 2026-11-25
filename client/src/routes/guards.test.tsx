@@ -1,16 +1,11 @@
-import { render, screen } from '@testing-library/react'
-import { createMemoryRouter, RouterProvider } from 'react-router'
+import { screen } from '@testing-library/react'
+import { renderRoutes } from '../test/render'
 import { describe, expect, it } from 'vitest'
 import { useSession } from '../stores/session'
 import { testUser } from '../test/server'
 import type { PublicUser } from '../api/types'
-import { routes } from './router'
 
-function visit(path: string) {
-  const router = createMemoryRouter(routes, { initialEntries: [path] })
-  render(<RouterProvider router={router} />)
-  return router
-}
+const visit = (path: string) => renderRoutes(path).router
 
 const signIn = (user: Partial<PublicUser>) =>
   useSession.getState().signIn({ user: testUser(user), accessToken: 't' })
@@ -38,7 +33,7 @@ describe('route guards', () => {
   it('a CUSTOMER at an agent page → the customer home', async () => {
     signIn({ role: 'CUSTOMER', status: 'ACTIVE' })
     const router = visit('/cash-in')
-    expect(await screen.findByRole('heading', { name: 'Customer home' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Home' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/')
   })
 
@@ -52,7 +47,7 @@ describe('route guards', () => {
   it('a PENDING_KYC customer typing /send-money → home', async () => {
     signIn({ role: 'CUSTOMER', status: 'PENDING_KYC', kycStatus: 'PENDING' })
     const router = visit('/send-money')
-    expect(await screen.findByRole('heading', { name: 'Customer home' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Home' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/')
   })
 
@@ -73,7 +68,7 @@ describe('route guards', () => {
   it('a signed-in user who opens /register → their home', async () => {
     signIn({ role: 'CUSTOMER', status: 'ACTIVE' })
     const router = visit('/register')
-    expect(await screen.findByRole('heading', { name: 'Customer home' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Home' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/')
   })
 

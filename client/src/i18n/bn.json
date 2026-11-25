@@ -8,7 +8,7 @@
     "register": "অ্যাকাউন্ট খুলুন",
     "demo": {
       "title": "ডেমো চালিয়ে দেখুন",
-      "hint": "এক ট্যাপেই একটি নমুনা অ্যাকাউন্টে লগ ইন হবে।",
+      "hint": "এক ট্যাপেই একটি ডেমো অ্যাকাউন্টে লগ ইন হবে।",
       "CUSTOMER": "গ্রাহক (রহিম)",
       "AGENT": "এজেন্ট",
       "MERCHANT": "মার্চেন্ট",
@@ -17,16 +17,20 @@
   },
   "flows": {
     "SEND_MONEY": {
-      "title": "সেন্ড মানি"
+      "title": "সেন্ড মানি",
+      "receiver": "প্রাপকের নম্বর"
     },
     "CASH_OUT": {
-      "title": "ক্যাশ আউট"
+      "title": "ক্যাশ আউট",
+      "receiver": "এজেন্টের নম্বর"
     },
     "PAYMENT": {
-      "title": "পেমেন্ট"
+      "title": "পেমেন্ট",
+      "receiver": "মার্চেন্টের নম্বর"
     },
     "CASH_IN": {
-      "title": "ক্যাশ ইন"
+      "title": "ক্যাশ ইন",
+      "receiver": "গ্রাহকের নম্বর"
     }
   },
   "placeholder": {
@@ -118,7 +122,7 @@
       "selfie": "সেলফি",
       "pin": "৫ সংখ্যার একটি পিন বেছে নিন",
       "confirmPin": "পিনটি আবার দিন",
-      "submit": "অ্যাকাউন্ট তৈরি করুন"
+      "submit": "অ্যাকাউন্ট খুলুন"
     }
   },
   "validation": {
@@ -185,6 +189,43 @@
     "INVALID_PIN_attempts_other": "পিন ভুল। অ্যাকাউন্ট লক হওয়ার আগে আর {{count, number}} বার চেষ্টা করতে পারবেন।",
     "OTP_INVALID_attempts_one": "কোডটি সঠিক নয়। আর {{count, number}} বার চেষ্টা করতে পারবেন।",
     "OTP_INVALID_attempts_other": "কোডটি সঠিক নয়। আর {{count, number}} বার চেষ্টা করতে পারবেন।",
-    "ACCOUNT_LOCKED_until": "অনেকবার ভুল পিন দেওয়া হয়েছে। {{until, dhakaTime}} পর্যন্ত আপনার অ্যাকাউন্ট লক থাকবে।"
+    "ACCOUNT_LOCKED_until": "অনেকবার ভুল পিন দেওয়া হয়েছে। {{until, dhakaTime}} পর্যন্ত আপনার অ্যাকাউন্ট লক থাকবে।",
+    "LIMIT_EXCEEDED_DAY_AMOUNT": "এতে আপনার দৈনিক সীমা {{limit, taka}} পার হয়ে যাবে। আজ ব্যবহার হয়েছে {{used, taka}}।",
+    "LIMIT_EXCEEDED_MONTH_AMOUNT": "এতে আপনার মাসিক সীমা {{limit, taka}} পার হয়ে যাবে। এ মাসে ব্যবহার হয়েছে {{used, taka}}।",
+    "LIMIT_EXCEEDED_DAY_COUNT": "আজকের {{limit, number}}টি লেনদেনের সীমা শেষ হয়ে গেছে।",
+    "LIMIT_EXCEEDED_MONTH_COUNT": "এ মাসের {{limit, number}}টি লেনদেনের সীমা শেষ হয়ে গেছে।"
+  },
+  "home": {
+    "balance": "ব্যালেন্স",
+    "showBalance": "ব্যালেন্স দেখুন",
+    "recent": "সাম্প্রতিক লেনদেন",
+    "seeAll": "সব দেখুন",
+    "empty": "এখনো কোনো লেনদেন নেই",
+    "emptyBody": "আপনি টাকা পাঠালে বা পেলে তা এখানে দেখা যাবে।"
+  },
+  "transfer": {
+    "amount": "টাকার পরিমাণ",
+    "note": "নোট (ঐচ্ছিক)",
+    "next": "পরবর্তী",
+    "wrongRole": {
+      "CUSTOMER": "একজন গ্রাহকের নম্বর দিন।",
+      "AGENT": "একজন এজেন্টের নম্বর দিন।",
+      "MERCHANT": "একজন মার্চেন্টের নম্বর দিন।"
+    },
+    "from": "প্রেরক",
+    "to": "প্রাপক",
+    "fee": "চার্জ",
+    "total": "মোট",
+    "pin": "আপনার পিন দিন",
+    "confirm": "নিশ্চিত করুন",
+    "tryAgain": "আবার চেষ্টা করুন",
+    "success": "লেনদেন সফল হয়েছে",
+    "trxId": "TrxID",
+    "balanceAfter": "নতুন ব্যালেন্স",
+    "time": "সময়",
+    "done": "ঠিক আছে",
+    "share": "শেয়ার করুন",
+    "copied": "TrxID কপি করা হয়েছে।",
+    "shareText": "PocketPay TrxID: {{trxId}}"
   }
 }

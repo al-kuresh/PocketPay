@@ -98,8 +98,20 @@ describe('error codes', () => {
     expect(errorMessage(t, new ApiError(423, 'ACCOUNT_LOCKED', 'x'))).toBe(en.errors.ACCOUNT_LOCKED)
   })
 
+  it('LIMIT_EXCEEDED with details → which limit, in taka or a count, in the language of t', () => {
+    const err = (d: object) => new ApiError(422, 'LIMIT_EXCEEDED', 'x', d)
+    const dayAmount = err({ period: 'DAY', kind: 'AMOUNT', limit: '2500000', used: '2480000' })
+    expect(errorMessage(t, dayAmount)).toBe('This would go over your daily limit of ৳25,000.00. Used today: ৳24,800.00.')
+    expect(errorMessage(i18n.getFixedT('bn'), dayAmount)).toContain('৳২৫,০০০.০০')
+    expect(errorMessage(t, err({ period: 'MONTH', kind: 'COUNT', limit: '50', used: '50' }))).toBe(
+      "You've reached this month's limit of 50 transactions.",
+    )
+  })
+
   it('details of the wrong shape are ignored (no "{{count}}" or "Invalid Date" leaks)', () => {
     const odd = [
+      new ApiError(422, 'LIMIT_EXCEEDED', 'x', { period: 'WEEK', kind: 'AMOUNT', limit: '1', used: '1' }),
+      new ApiError(422, 'LIMIT_EXCEEDED', 'x', { period: 'DAY', kind: 'AMOUNT', limit: 2500000, used: '1' }),
       new ApiError(401, 'INVALID_CREDENTIALS', 'x', { attemptsLeft: '2' }),
       new ApiError(423, 'ACCOUNT_LOCKED', 'x', { lockedUntil: 'soon' }),
       new ApiError(400, 'VALIDATION_ERROR', 'x', [{ path: 'phone', message: 'bad' }]),

@@ -17,16 +17,20 @@
   },
   "flows": {
     "SEND_MONEY": {
-      "title": "Send Money"
+      "title": "Send Money",
+      "receiver": "Receiver's number"
     },
     "CASH_OUT": {
-      "title": "Cash Out"
+      "title": "Cash Out",
+      "receiver": "Agent's number"
     },
     "PAYMENT": {
-      "title": "Payment"
+      "title": "Payment",
+      "receiver": "Merchant's number"
     },
     "CASH_IN": {
-      "title": "Cash In"
+      "title": "Cash In",
+      "receiver": "Customer's number"
     }
   },
   "placeholder": {
@@ -185,6 +189,43 @@
     "INVALID_PIN_attempts_other": "Wrong PIN. {{count, number}} attempts left before your account locks.",
     "OTP_INVALID_attempts_one": "That code is not right. {{count, number}} attempt left.",
     "OTP_INVALID_attempts_other": "That code is not right. {{count, number}} attempts left.",
-    "ACCOUNT_LOCKED_until": "Too many wrong PINs. Your account is locked until {{until, dhakaTime}}."
+    "ACCOUNT_LOCKED_until": "Too many wrong PINs. Your account is locked until {{until, dhakaTime}}.",
+    "LIMIT_EXCEEDED_DAY_AMOUNT": "This would go over your daily limit of {{limit, taka}}. Used today: {{used, taka}}.",
+    "LIMIT_EXCEEDED_MONTH_AMOUNT": "This would go over your monthly limit of {{limit, taka}}. Used this month: {{used, taka}}.",
+    "LIMIT_EXCEEDED_DAY_COUNT": "You've reached today's limit of {{limit, number}} transactions.",
+    "LIMIT_EXCEEDED_MONTH_COUNT": "You've reached this month's limit of {{limit, number}} transactions."
+  },
+  "home": {
+    "balance": "Balance",
+    "showBalance": "Show balance",
+    "recent": "Recent transactions",
+    "seeAll": "See all",
+    "empty": "No transactions yet",
+    "emptyBody": "Money you send or receive shows up here."
+  },
+  "transfer": {
+    "amount": "Amount",
+    "note": "Note (optional)",
+    "next": "Next",
+    "wrongRole": {
+      "CUSTOMER": "Enter a customer's number.",
+      "AGENT": "Enter an agent's number.",
+      "MERCHANT": "Enter a merchant's number."
+    },
+    "from": "From",
+    "to": "To",
+    "fee": "Fee",
+    "total": "Total",
+    "pin": "Enter your PIN",
+    "confirm": "Confirm",
+    "tryAgain": "Try again",
+    "success": "Successful",
+    "trxId": "TrxID",
+    "balanceAfter": "New balance",
+    "time": "Time",
+    "done": "Done",
+    "share": "Share",
+    "copied": "TrxID copied.",
+    "shareText": "PocketPay TrxID: {{trxId}}"
   }
 }
