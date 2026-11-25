@@ -49,6 +49,20 @@
 
   /* Motion. Use with duration-150 (hover, press) or duration-200 (reveals). */
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-hold: 1200ms; /* hold to send: HOLD_MS in HoldToSendButton.tsx */
+}
+
+/* Hold to send: the fill sweeps across the button for the whole hold and snaps back when let go. Under reduced
+   motion it shows at once (no sweep); the hold time is the button's timer, so it still applies. */
+@utility hold-fill {
+  clip-path: inset(0 100% 0 0);
+  [data-holding='true'] > & {
+    clip-path: inset(0);
+    transition: clip-path var(--duration-hold) linear;
+    @media (prefers-reduced-motion: reduce) {
+      transition: none;
+    }
+  }
 }
 
 /* Hero amounts: Anek Bangla at its narrow width (the wdth axis), digits lined up (TASTE.md). */

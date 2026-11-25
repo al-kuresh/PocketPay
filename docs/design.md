@@ -465,7 +465,7 @@ The 4 money POSTs require an `Idempotency-Key` header (a UUID): `201` for a new 
 - **Hardening:**
   - `helmet` headers.
   - Strict CORS (only the frontend origin).
-  - Rate limits on auth and money endpoints. Money POSTs, preview and the receiver lookup are limited **per user** (30 per minute each budget; they run after `requireAuth`), which is safe behind CGNAT. Login and OTP run before anyone is known, so they stay per IP.
+  - Rate limits on auth and money endpoints. Money POSTs, preview and the receiver lookup are limited **per user**, each with its own budget (money POSTs 30 a minute, shared by the four; preview 60; lookup 30; they run after `requireAuth`), which is safe behind CGNAT. Login and OTP run before anyone is known, so they stay per IP.
   - Request body size limit.
   - Zod validation on every input.
   - Prisma parameterised queries (no SQL injection).

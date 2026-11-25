@@ -40,8 +40,11 @@ export const loginLimiter = createLimiter({ windowMs: 15 * MINUTE, limit: 10 });
 // Only for routes after requireAuth, which sets req.user.
 const byUser = (req: Request) => req.user!.id;
 
-/** The 4 money POSTs and preview: 30 per minute per user, one budget shared by all five. */
+/** The 4 money POSTs: 30 per minute per user, one budget shared by all four. */
 export const moneyLimiter = createLimiter({ windowMs: MINUTE, limit: 30, keyGenerator: byUser });
+
+/** POST /transactions/preview: 60 per minute per user, its own budget, so fee checks never use up the money POSTs'. */
+export const previewLimiter = createLimiter({ windowMs: MINUTE, limit: 60, keyGenerator: byUser });
 
 /** PATCH /auth/pin: 5 per 15 minutes per user (on top of the 3-strike PIN lockout). */
 export const pinChangeLimiter = createLimiter({

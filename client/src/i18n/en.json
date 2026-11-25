@@ -52,7 +52,6 @@
     "profile": "Profile"
   },
   "amount": {
-    "invalid": "Enter an amount like 500 or 1,500.50.",
     "keypad": "Amount keypad",
     "delete": "Delete"
   },
@@ -222,7 +221,6 @@
     "fee": "Fee",
     "total": "Total",
     "pin": "Enter your PIN",
-    "confirm": "Confirm",
     "tryAgain": "Try again",
     "success": "Successful",
     "trxId": "TrxID",
@@ -235,7 +233,11 @@
     "shareText": "PocketPay TrxID: {{trxId}}",
     "change": "Change",
     "feeLine": "Fee {{fee}}",
-    "noFee": "No fee"
+    "noFee": "No fee",
+    "checkTitle": "Check and send",
+    "holdToSend": "Hold to send {{amount}}",
+    "keepHolding": "Keep holding…",
+    "holdHint": "Press and hold · let go to cancel"
   },
   "history": {
     "type": "Type",

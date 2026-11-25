@@ -8,7 +8,6 @@ import en from '../../i18n/en.json'
 import { useLanguage } from '../../stores/language'
 import { AppShell } from '../layout/AppShell'
 import { BottomNav } from '../layout/BottomNav'
-import { AmountInput } from './AmountInput'
 import { Button } from './Button'
 import { Card } from './Card'
 import { EmptyState } from './EmptyState'
@@ -85,43 +84,6 @@ describe('PinInput', () => {
     expect(container.textContent).not.toMatch(/[0-9]/)
     expect(container.innerHTML).not.toContain('48213')
     expect(document.querySelectorAll('[data-filled="true"]')).toHaveLength(5)
-  })
-})
-
-describe('AmountInput', () => {
-  function renderAmount() {
-    const onAmountChange = vi.fn()
-    render(<AmountInput label="Amount" onAmountChange={onAmountChange} />)
-    return { onAmountChange, input: screen.getByLabelText('Amount') }
-  }
-
-  it('shows ৳ and reports "1,500.50" as poisha "150050"', () => {
-    const { input, onAmountChange } = renderAmount()
-    expect(screen.getByText('৳')).toBeInTheDocument()
-    fireEvent.change(input, { target: { value: '1,500.50' } })
-    expect(onAmountChange).toHaveBeenLastCalledWith({ text: '1,500.50', poisha: '150050', error: null })
-  })
-
-  it('accepts Bangla digits', () => {
-    const { input, onAmountChange } = renderAmount()
-    fireEvent.change(input, { target: { value: '১৫০০.৫০' } })
-    expect(onAmountChange).toHaveBeenLastCalledWith({ text: '১৫০০.৫০', poisha: '150050', error: null })
-  })
-
-  it('"1.234" reports the error key and shows its message', () => {
-    const { input, onAmountChange } = renderAmount()
-    fireEvent.change(input, { target: { value: '1.234' } })
-    expect(onAmountChange).toHaveBeenLastCalledWith({ text: '1.234', poisha: null, error: 'amount.invalid' })
-    expect(screen.getByRole('alert')).toHaveTextContent(en.amount.invalid)
-    expect(input).toHaveAttribute('aria-invalid', 'true')
-  })
-
-  it('empty is no amount but not an error yet', () => {
-    const { input, onAmountChange } = renderAmount()
-    fireEvent.change(input, { target: { value: '5' } })
-    fireEvent.change(input, { target: { value: '' } })
-    expect(onAmountChange).toHaveBeenLastCalledWith({ text: '', poisha: null, error: null })
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })
 
@@ -378,7 +340,6 @@ describe('every component renders in bn', () => {
             <StatusBanner kind="REJECTED" />
             <StatusBanner kind="DEMO" />
             <ImagePicker label="ছবি" onChange={() => {}} />
-            <AmountInput label="টাকা" onAmountChange={() => {}} />
             <PinInput label="পিন" />
             <PhoneInput label="ফোন" />
             <Button loading>পাঠান</Button>
@@ -402,8 +363,6 @@ describe('every component renders in bn', () => {
       expect(screen.getByText(text)).toBeInTheDocument()
     }
     expect(screen.getByRole('button', { name: bn.common.back })).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('টাকা'), { target: { value: '1.234' } })
-    expect(screen.getByRole('alert')).toHaveTextContent(bn.amount.invalid)
   })
 })
 

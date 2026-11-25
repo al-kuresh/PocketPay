@@ -9,6 +9,8 @@ beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 // jsdom has no object URLs; ImagePicker previews need one.
 URL.createObjectURL = vi.fn(() => 'blob:preview')
 URL.revokeObjectURL = vi.fn()
+// jsdom has no pointer capture; HoldToSendButton captures the pointer on press.
+Element.prototype.setPointerCapture = vi.fn()
 afterEach(() => {
   cleanup()
   server.resetHandlers()

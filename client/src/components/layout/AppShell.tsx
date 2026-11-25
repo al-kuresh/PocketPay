@@ -16,6 +16,8 @@ interface AppShellProps {
   headerEnd?: ReactNode
   /** The orange block at the top of Home (greeting and balance). Home has no app bar: the hero starts at the safe area. */
   hero?: ReactNode
+  /** The page on the canvas tone, so white cards stand out (Home has it with the hero; also Confirm). */
+  canvas?: boolean
   children: ReactNode
 }
 
@@ -23,7 +25,7 @@ interface AppShellProps {
 const ON_BRAND = 'bg-primary-dark text-white [&_:focus-visible]:outline-white'
 
 /** MobileShell + an orange app bar (back, title, extra) + an optional hero + the page + an optional bottom nav. */
-export function AppShell({ title, onBack, backDisabled, nav = false, headerEnd, hero, children }: AppShellProps) {
+export function AppShell({ title, onBack, backDisabled, nav = false, headerEnd, hero, canvas = !!hero, children }: AppShellProps) {
   const { t } = useTranslation()
   return (
     <MobileShell>
@@ -47,8 +49,8 @@ export function AppShell({ title, onBack, backDisabled, nav = false, headerEnd, 
         </header>
       )}
       {hero && <div className={`${ON_BRAND} rounded-b-3xl px-6 pt-safe`}>{hero}</div>}
-      {/* Home's white panels sit on the canvas tone, like the approved design. */}
-      <main className={`flex flex-1 flex-col gap-6 px-6 py-6 ${hero ? 'bg-canvas' : ''}`}>{children}</main>
+      {/* White panels and cards sit on the canvas tone, like the approved design. */}
+      <main className={`flex flex-1 flex-col gap-6 px-6 py-6 ${canvas ? 'bg-canvas' : ''}`}>{children}</main>
       {nav && (
         <>
           {/* Room for the fixed nav, so it never covers the end of the page. */}
