@@ -3,7 +3,7 @@ import { RequireActive, RequireAuth, RequireRole } from './guards'
 import { Home, Page } from './placeholders'
 
 export const routes: RouteObject[] = [
-  { path: '/login', element: <Page title="Log in" /> },
+  { path: '/login', element: <Page titleKey="login.title" /> },
   {
     element: <RequireAuth />,
     children: [
@@ -14,16 +14,16 @@ export const routes: RouteObject[] = [
           {
             element: <RequireActive />,
             children: [
-              { path: 'send-money', element: <Page title="Send Money" /> },
-              { path: 'cash-out', element: <Page title="Cash Out" /> },
-              { path: 'payment', element: <Page title="Payment" /> },
+              { path: 'send-money', element: <Page titleKey="flows.SEND_MONEY.title" /> },
+              { path: 'cash-out', element: <Page titleKey="flows.CASH_OUT.title" /> },
+              { path: 'payment', element: <Page titleKey="flows.PAYMENT.title" /> },
             ],
           },
         ],
       },
       {
         element: <RequireRole role="AGENT" />,
-        children: [{ element: <RequireActive />, children: [{ path: 'cash-in', element: <Page title="Cash In" /> }] }],
+        children: [{ element: <RequireActive />, children: [{ path: 'cash-in', element: <Page titleKey="flows.CASH_IN.title" /> }] }],
       },
     ],
   },

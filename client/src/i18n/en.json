@@ -1,0 +1,65 @@
+{
+  "login": {
+    "title": "Log in"
+  },
+  "flows": {
+    "SEND_MONEY": { "title": "Send Money" },
+    "CASH_OUT": { "title": "Cash Out" },
+    "PAYMENT": { "title": "Payment" },
+    "CASH_IN": { "title": "Cash In" }
+  },
+  "placeholder": {
+    "home": {
+      "CUSTOMER": "Customer home",
+      "AGENT": "Agent home",
+      "MERCHANT": "Merchant home",
+      "ADMIN": "Admin home"
+    }
+  },
+  "errors": {
+    "GENERIC": "Something went wrong. Please try again.",
+    "NETWORK_ERROR": "No connection. Check your internet and try again.",
+    "VALIDATION_ERROR": "Please check the details you entered.",
+    "PHONE_TAKEN": "This number already has an account. Log in instead.",
+    "NID_TAKEN": "This NID is already registered.",
+    "OTP_COOLDOWN": "Please wait a little before asking for a new code.",
+    "OTP_INVALID": "That code is not right.",
+    "OTP_EXPIRED": "This code has expired. Ask for a new one.",
+    "OTP_LOCKED": "Too many wrong codes. Ask for a new one.",
+    "OTP_SEND_FAILED": "We couldn't send the code. Try again.",
+    "REGISTRATION_TOKEN_INVALID": "Your sign-up has timed out. Please start again.",
+    "MISSING_FILE": "A photo is missing.",
+    "UPLOAD_FAILED": "The upload failed. Try again.",
+    "FILE_TOO_LARGE": "This image is too large. Use one under 2 MB.",
+    "UNSUPPORTED_FILE_TYPE": "Use a JPEG, PNG or WebP image.",
+    "INVALID_CREDENTIALS": "Wrong phone number or PIN.",
+    "ACCOUNT_LOCKED": "Too many wrong PINs. Your account is locked for now.",
+    "INVALID_PIN": "Wrong PIN.",
+    "PIN_UNCHANGED": "Your new PIN must be different from the current one.",
+    "ACCOUNT_FROZEN": "This account is frozen. Please contact support.",
+    "UNAUTHENTICATED": "Please log in again.",
+    "FORBIDDEN": "You can't do this.",
+    "REFRESH_TOKEN_INVALID": "Your session has ended. Please log in again.",
+    "REFRESH_IN_PROGRESS": "Please try again.",
+    "RATE_LIMITED": "Too many tries. Wait a little and try again.",
+    "IDEMPOTENCY_KEY_REQUIRED": "Something went wrong. Please try again.",
+    "ACCOUNT_NOT_ACTIVE": "Your account isn't active yet, so you can't move money.",
+    "RECEIVER_NOT_FOUND": "There is no account with this number.",
+    "CANNOT_SEND_TO_SELF": "You can't send money to yourself.",
+    "INVALID_RECEIVER": "This number can't receive this kind of transaction.",
+    "RECEIVER_NOT_ACTIVE": "This account can't receive money right now.",
+    "AMOUNT_BELOW_MINIMUM": "The amount is below the minimum.",
+    "AMOUNT_ABOVE_MAXIMUM": "The amount is above the maximum.",
+    "LIMIT_EXCEEDED": "This would go over your limit.",
+    "RECEIVER_LIMIT_EXCEEDED": "The receiver's limit is used up.",
+    "RECEIVER_BALANCE_LIMIT": "The receiver's balance would go over its limit.",
+    "INSUFFICIENT_BALANCE": "Not enough balance for the amount and the fee.",
+    "IDEMPOTENCY_KEY_REUSED": "This request was already used for another transaction. Start a new one.",
+    "TRANSACTION_NOT_FOUND": "Transaction not found.",
+    "WALLET_NOT_FOUND": "Wallet not found.",
+    "INVALID_JSON": "Something went wrong. Please try again.",
+    "PAYLOAD_TOO_LARGE": "This is too large to send.",
+    "NOT_FOUND": "Not found.",
+    "INTERNAL_ERROR": "Something went wrong on our side. Please try again."
+  }
+}

@@ -12,6 +12,8 @@ export default defineConfig({
       '/api': 'http://localhost:4000',
       '/uploads': 'http://localhost:4000',
     },
+    // The i18n test checks error codes against docs/api.md. Allow docs/ only: '..' would expose server/.env.
+    fs: { allow: ['.', '../docs'] },
   },
   test: {
     environment: 'jsdom',
