@@ -41,7 +41,7 @@ export function AppShell({ title, onBack, backDisabled, nav = false, headerEnd, 
                 <ArrowLeft aria-hidden className="size-6" />
               </button>
             )}
-            {title && <h1 className="flex-1 truncate text-lg font-semibold text-white">{title}</h1>}
+            {title && <h1 className="flex-1 truncate font-display text-xl font-semibold text-white">{title}</h1>}
             {headerEnd && <div className="ml-auto">{headerEnd}</div>}
           </div>
         </header>

@@ -19,6 +19,7 @@ import { PhoneInput } from './PhoneInput'
 import { PinInput, type PinInputHandle } from './PinInput'
 import { Skeleton } from './Skeleton'
 import { StatusBanner } from './StatusBanner'
+import { Stitch } from './Stitch'
 import { ToastProvider } from './Toast'
 import { useToast } from './toast-context'
 
@@ -275,6 +276,23 @@ describe('Button', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Pay' }))
     expect(onClick).toHaveBeenCalledTimes(1)
     expect(screen.getByRole('button')).toHaveAttribute('type', 'button')
+  })
+})
+
+describe('Stitch', () => {
+  it.each([
+    ['rect', 'rect'],
+    ['line', 'line'],
+    ['circle', 'circle'],
+  ] as const)('shape="%s" draws a decorative, round-capped running stitch', (shape, tag) => {
+    const { container } = render(<Stitch shape={shape} className="stroke-thread" />)
+    const svg = container.querySelector('svg')!
+    expect(svg).toHaveAttribute('aria-hidden', 'true')
+    expect(svg).toHaveClass('stroke-thread')
+    const mark = svg.querySelector(tag)!
+    expect(mark).toHaveAttribute('stroke-linecap', 'round')
+    expect(mark).toHaveAttribute('stroke-dasharray', '7 9')
+    expect(mark).toHaveAttribute('fill', 'none')
   })
 })
 

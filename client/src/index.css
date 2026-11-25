@@ -5,11 +5,16 @@
    `node design/check-tokens.mjs` from the repo root to find values that bypass it. */
 @theme {
   /* Brand */
-  --color-primary: #EA580C; /* header bar, balance card, icons, large text only (3.6:1 on white) */
-  --color-primary-dark: #C2410C; /* buttons, links, active tab, focus ring (5.2:1 on white) */
+  --color-primary: #EA580C; /* icons and large text only (3.6:1 on white) */
+  --color-primary-dark: #C2410C; /* app bar, Home pocket, buttons, links, active tab, focus ring (5.2:1 on white) */
   --color-primary-darker: #9A3412; /* button hover / pressed */
-  --color-primary-light: #F97316; /* balance-card gradient end, illustrations; never behind small text */
-  --color-primary-50: #FFF7ED; /* selected rows, info boxes */
+  --color-primary-light: #F97316; /* illustrations; never behind small text */
+  --color-primary-50: #FFF7ED; /* selected rows, info boxes, the hold-to-send button */
+
+  /* The Kantha running stitch (components/ui/Stitch.tsx). Decorative, so no contrast minimum. */
+  --color-thread: #FED7AA; /* on primary-dark: the Home pocket, the Sent ring */
+  --color-thread-dark: #FDBA74; /* on white or primary-50: hold to send */
+  --color-thread-muted: #CBD5E1; /* receipt tear lines on a white card */
 
   /* Surfaces */
   --color-canvas: #F8FAFC; /* page background behind the phone frame */
@@ -31,6 +36,13 @@
   --color-warning: #D97706;
   --color-warning-dark: #B45309; /* 5.0:1 on white */
 
+  /* Type. Both families cover Latin and Bangla (and ৳), self-hosted from Fontsource (imported in main.tsx).
+     Overriding --font-sans makes Hind Siliguri the default for the whole page. */
+  --font-sans: "Hind Siliguri", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Anek Bangla Variable", "Hind Siliguri", system-ui, sans-serif; /* amounts and titles */
+  --text-hero: 4rem; /* 64px: the keypad amount and the Sent amount */
+  --text-hero--line-height: 1;
+
   /* Layout */
   --container-phone: 420px; /* phone-width app frame */
 
@@ -38,37 +50,15 @@
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Bangla (and ৳) in one bundled font on every phone, from @fontsource/noto-sans-bengali. Only the Bengali subset,
-   with its unicode-range: Latin stays on the system font, and an English-only visit downloads nothing.
-   Weights 400/500/600 = font-normal, font-medium, font-semibold (TASTE.md). */
-@font-face {
-  font-family: "Noto Sans Bengali";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url("@fontsource/noto-sans-bengali/files/noto-sans-bengali-bengali-400-normal.woff2") format("woff2");
-  unicode-range: U+0951-0952, U+0964-0965, U+0980-09FE, U+1CD0, U+1CD2, U+1CD5-1CD6, U+1CD8, U+1CE1, U+1CEA, U+1CED, U+1CF2, U+1CF5-1CF7, U+200C-200D, U+20B9, U+25CC, U+A8F1;
-}
-@font-face {
-  font-family: "Noto Sans Bengali";
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url("@fontsource/noto-sans-bengali/files/noto-sans-bengali-bengali-500-normal.woff2") format("woff2");
-  unicode-range: U+0951-0952, U+0964-0965, U+0980-09FE, U+1CD0, U+1CD2, U+1CD5-1CD6, U+1CD8, U+1CE1, U+1CEA, U+1CED, U+1CF2, U+1CF5-1CF7, U+200C-200D, U+20B9, U+25CC, U+A8F1;
-}
-@font-face {
-  font-family: "Noto Sans Bengali";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url("@fontsource/noto-sans-bengali/files/noto-sans-bengali-bengali-600-normal.woff2") format("woff2");
-  unicode-range: U+0951-0952, U+0964-0965, U+0980-09FE, U+1CD0, U+1CD2, U+1CD5-1CD6, U+1CD8, U+1CE1, U+1CEA, U+1CED, U+1CF2, U+1CF5-1CF7, U+200C-200D, U+20B9, U+25CC, U+A8F1;
+/* Hero amounts: Anek Bangla at its narrow width (the wdth axis), digits lined up (TASTE.md). */
+@utility font-amount {
+  font-family: var(--font-display);
+  font-stretch: 80%;
+  font-variant-numeric: tabular-nums;
 }
 
 body {
   @apply bg-canvas text-text antialiased;
-  font-family: "Noto Sans Bengali", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 /* One visible focus style for every interactive element. */
