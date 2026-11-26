@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HistoryItem } from '../../api/types'
@@ -87,6 +87,15 @@ describe('History', () => {
     const last = queries.at(-1)!
     expect(last.get('type')).toBe('CASH_OUT')
     expect(last.get('cursor')).toBeNull()
+  })
+
+  it('arrow keys move between the chips: ArrowRight from "All types" checks the next type and asks the server for it', async () => {
+    const { user } = renderRoutes('/history')
+    await screen.findByText('Karim H***')
+    act(() => screen.getByRole('radio', { name: en.history.all }).focus())
+    await user.keyboard('{ArrowRight}')
+    expect(screen.getByRole('radio', { name: en.flows.SEND_MONEY.title })).toBeChecked()
+    await waitFor(() => expect(queries.at(-1)?.get('type')).toBe('SEND_MONEY'))
   })
 
   it.each([

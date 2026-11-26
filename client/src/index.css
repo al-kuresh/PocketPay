@@ -69,11 +69,18 @@
    motion it shows at once (no sweep); the hold time is the button's timer, so it still applies. */
 @utility hold-fill {
   clip-path: inset(0 100% 0 0);
+  /* Sending: full at once. No second sweep when the hold's end and the POST's start land a frame apart. */
+  [aria-busy='true'] > & {
+    clip-path: inset(0);
+  }
   [data-holding='true'] > & {
     clip-path: inset(0);
     transition: clip-path var(--hold-ms) linear; /* set inline from HOLD_MS by HoldToSendButton */
     @media (prefers-reduced-motion: reduce) {
-      transition: none;
+      /* Four still steps over the hold, not a sweep: progress shows, nothing moves. !important: it must beat the
+         global reduced-motion reset below (an !important in a layer beats an unlayered one). */
+      transition-timing-function: steps(4);
+      transition-duration: var(--hold-ms) !important;
     }
   }
 }

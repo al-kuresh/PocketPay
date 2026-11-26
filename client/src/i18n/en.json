@@ -224,7 +224,7 @@
     "fee": "Fee",
     "total": "Total",
     "pin": "Enter your PIN",
-    "tryAgain": "Try again",
+    "holdRetry": "Hold to try again {{amount}}",
     "success": "Money sent",
     "trxId": "TrxID",
     "balanceAfter": "New balance",

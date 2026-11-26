@@ -38,6 +38,7 @@ export function HoldToSendButton({ label, disabled = false, loading = false, onH
     setHolding(true)
     timer.current = setTimeout(() => {
       timer.current = undefined
+      setHolding(false) // done: a button disabled mid-hold may never get its pointerup (aria-busy keeps the fill)
       if ('vibrate' in navigator) navigator.vibrate(30)
       onHold()
     }, HOLD_MS)
@@ -64,7 +65,7 @@ export function HoldToSendButton({ label, disabled = false, loading = false, onH
         aria-label={label}
         aria-busy={loading || undefined}
         aria-describedby={hintId}
-        data-holding={holding || loading}
+        data-holding={holding}
         onPointerDown={(e) => {
           if (e.button !== 0) return
           e.currentTarget.setPointerCapture(e.pointerId) // the hold survives the finger sliding off the button

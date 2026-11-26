@@ -2,7 +2,7 @@ import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/
 import { ArrowRight } from 'lucide-react'
 import { startTransition, useEffect, useId, useRef, useState, ViewTransition, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router'
+import { useBlocker, useNavigate } from 'react-router'
 import { ApiError } from '../../api/client'
 import { lookup, preview as fetchPreview, transfer } from '../../api/transactions'
 import type { Preview, Receipt, TxType } from '../../api/types'
@@ -74,6 +74,21 @@ export function TransferFlow({ type }: { type: TxType }) {
   // one: a lost response ("did it pay?") followed by a retyped, identical amount must replay, never pay twice.
   const [key, setKey] = useState<{ value: string; phone: string; amount: string } | null>(null)
   const sending = useIsMutating({ mutationKey: ['transfer'] }) > 0
+
+  // Leaving mid-send (the phone's back gesture, the browser's Back) would drop the key with this component, and the
+  // same payment retyped would then pay twice: blocked, and a blocked attempt does nothing. The live cache, not
+  // `sending`: ACCOUNT_LOCKED navigates home from onError, before `sending` has re-rendered to false.
+  const blocker = useBlocker(() => queryClient.isMutating({ mutationKey: ['transfer'] }) > 0)
+  useEffect(() => {
+    if (blocker.state === 'blocked') blocker.reset()
+  }, [blocker])
+  // Closing or reloading the tab mid-send: the browser asks first.
+  useEffect(() => {
+    if (!sending) return
+    const ask = (e: BeforeUnloadEvent) => e.preventDefault()
+    window.addEventListener('beforeunload', ask)
+    return () => window.removeEventListener('beforeunload', ask)
+  }, [sending])
 
   function change(patch: Partial<Details>) {
     setDetails((d) => ({ ...d, ...patch }))
@@ -272,22 +287,28 @@ function ConfirmStep({ flow, preview, note, onNoteChange, idempotencyKey, onSucc
   const [length, setLength] = useState(0)
   const [failure, setFailure] = useState<{ message: string; code: string } | null>(null)
 
+  // The PIN of the send in flight. Never the mutation's variables: the MutationCache keeps those (and devtools show them).
+  const submitted = useRef('')
   const send = useMutation({
-    mutationKey: ['transfer'], // TransferFlow disables Back while this is pending
-    mutationFn: (value: string) =>
+    mutationKey: ['transfer'], // TransferFlow blocks Back and leaving the page while this is pending
+    mutationFn: () =>
       transfer(
         flow.path,
         // What the user saw on Confirm: the server's normalised phone and the previewed amount.
-        { receiverPhone: preview.receiver.phone ?? '', amount: preview.amount, pin: value, note: note.trim() || undefined },
+        { receiverPhone: preview.receiver.phone ?? '', amount: preview.amount, pin: submitted.current, note: note.trim() || undefined },
         idempotencyKey,
       ),
+    onSettled: () => {
+      submitted.current = ''
+    },
+    gcTime: 0, // nothing in it is worth keeping once Confirm is gone
   })
 
   function submit() {
     if (send.isPending || pin.current.length < PIN_LENGTH) return
-    const value = pin.current
+    submitted.current = pin.current
     pinInput.current?.clear()
-    send.mutate(value, {
+    send.mutate(undefined, {
       onSuccess: (data) => onSuccess(data.receipt),
       onError: (err) => {
         const message = errorMessage(t, err)
@@ -360,7 +381,7 @@ function ConfirmStep({ flow, preview, note, onNoteChange, idempotencyKey, onSucc
         <HoldToSendButton
           label={
             failure?.code === 'NETWORK_ERROR'
-              ? t('transfer.tryAgain')
+              ? t('transfer.holdRetry', { amount: formatTaka(preview.total, { lang }) })
               : t(`flows.${preview.type}.hold`, { amount: formatTaka(preview.total, { lang }) })
           }
           disabled={length < PIN_LENGTH}

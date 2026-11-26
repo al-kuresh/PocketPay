@@ -36,17 +36,21 @@ let previews: unknown[]
 let lookups: string[]
 /** What the next money POSTs answer, in order; when empty, a receipt (201, or 200 replayed for a key seen before). */
 let answers: Array<'network' | [number, unknown]>
+let testNo = 0
 
 beforeEach(() => {
-  posts = []
-  previews = []
-  lookups = []
+  // This test's own arrays and token. A money POST an earlier (failed) test left in flight can reach MSW after these
+  // handlers are installed: it carries that test's token, so it is turned away before it is recorded or takes an answer.
+  const myPosts: Sent[] = (posts = [])
+  const myPreviews: unknown[] = (previews = [])
+  const myLookups: string[] = (lookups = [])
+  const myToken = `t${++testNo}`
   answers = []
-  useSession.getState().signIn({ user: testUser({ name: 'Rahim Uddin', phone: '01800000002' }), accessToken: 't' })
+  useSession.getState().signIn({ user: testUser({ name: 'Rahim Uddin', phone: '01800000002' }), accessToken: myToken })
   server.use(
     http.get('/api/v1/wallets/lookup', ({ request }) => {
       const phone = new URL(request.url).searchParams.get('phone') ?? ''
-      lookups.push(phone)
+      myLookups.push(phone)
       const who = PEOPLE[phone]
       return who
         ? HttpResponse.json({ success: true, data: who })
@@ -54,7 +58,7 @@ beforeEach(() => {
     }),
     http.post('/api/v1/transactions/preview', async ({ request }) => {
       const body = (await request.json()) as { type: string; receiverPhone: string; amount: string }
-      previews.push(body)
+      myPreviews.push(body)
       const fee = '500'
       return HttpResponse.json({
         success: true,
@@ -69,13 +73,14 @@ beforeEach(() => {
     }),
     ...(['send-money', 'cash-out', 'payment'] as const).map((path) =>
       http.post(`/api/v1/transactions/${path}`, async ({ request }) => {
+        if (request.headers.get('Authorization') !== `Bearer ${myToken}`) return HttpResponse.error() // an earlier test's
         const key = request.headers.get('Idempotency-Key')
         const body = (await request.json()) as Record<string, unknown>
-        posts.push({ path, key, body })
+        myPosts.push({ path, key, body })
         const answer = answers.shift()
         if (answer === 'network') return HttpResponse.error()
         if (answer) return HttpResponse.json(answer[1] as object, { status: answer[0] })
-        const replayed = posts.filter((p) => p.key === key).length > 1
+        const replayed = myPosts.filter((p) => p.key === key).length > 1
         const to = { phone: body.receiverPhone as string, ...PEOPLE[body.receiverPhone as string] }
         const receipt = {
           trxId: 'PP7K2M9QXA',
@@ -117,6 +122,8 @@ type FlowType = 'SEND_MONEY' | 'CASH_OUT' | 'PAYMENT' | 'CASH_IN'
 /** The hold button's label for a flow ("Hold to cash out ৳505.00"), in English unless `dict` is bn. */
 const holdLabel = (type: FlowType, total = '৳505.00', dict: typeof en = en) => dict.flows[type].hold.replace('{{amount}}', total)
 const sendHoldLabel = (total = '৳505.00') => holdLabel('SEND_MONEY', total)
+/** The hold button's name after a NETWORK_ERROR ("Hold to try again ৳505.00"). */
+const retryLabel = (total = '৳505.00') => en.transfer.holdRetry.replace('{{amount}}', total)
 
 afterEach(() => {
   vi.useRealTimers()
@@ -268,7 +275,7 @@ describe('TransferFlow: Send Money', () => {
 
     expect(await screen.findByText(en.errors.NETWORK_ERROR)).toBeInTheDocument()
     expect(pinField()).toHaveValue('') // the PIN is cleared after every submit
-    await submitPin(user, en.transfer.tryAgain)
+    await submitPin(user, retryLabel())
 
     expect(await screen.findByText('PP7K2M9QXA')).toBeInTheDocument()
     expect(posts).toHaveLength(2)
@@ -616,10 +623,11 @@ describe('the amount screen: keypad, chips, fee from preview', () => {
 
   it('the fee line comes from preview; Next fetches a FRESH preview, so Confirm shows the current fee', async () => {
     let fee = '500'
+    const myPreviews = previews
     server.use(
       http.post('/api/v1/transactions/preview', async ({ request }) => {
         const body = (await request.json()) as { type: string; receiverPhone: string; amount: string }
-        previews.push(body)
+        myPreviews.push(body)
         const receiver = { phone: body.receiverPhone, ...PEOPLE[body.receiverPhone] }
         const total = (BigInt(body.amount) + BigInt(fee)).toString()
         return HttpResponse.json({ success: true, data: { ...body, fee, total, receiver } })
@@ -822,9 +830,9 @@ describe('Confirm: hold to send', () => {
     expectNothingSent()
   })
 
-  it('reduced motion: the fill does not animate (no transition), but the hold time still applies', async () => {
+  it('reduced motion: the fill steps instead of sweeping, and the hold time still applies', async () => {
     const { user, button } = await ready()
-    // The sweep and its reduced-motion rule live in the hold-fill utility (index.css): jsdom can't evaluate media
+    // The sweep and its reduced-motion steps(4) live in the hold-fill utility (index.css): jsdom can't evaluate media
     // queries, so that rule is checked in a real browser. Here: the fill uses it, and the hold time still applies.
     expect(button.querySelector('[data-fill]')).toHaveClass('hold-fill')
     fakeTimers()
@@ -843,17 +851,109 @@ describe('Confirm: hold to send', () => {
     await user.type(screen.getByLabelText(en.transfer.note), 'rent')
 
     await user.type(pinField()!, '48213')
-    const retry = screen.getByRole('button', { name: en.transfer.tryAgain })
+    const retry = screen.getByRole('button', { name: retryLabel() })
     fakeTimers()
     await user.click(retry) // a tap is not enough
     wait(HOLD_MS * 2)
     expect(posts).toHaveLength(1)
     realTimers()
 
-    await hold(user, en.transfer.tryAgain)
+    await hold(user, retryLabel())
     expect(await screen.findByText('PP7K2M9QXA')).toBeInTheDocument()
     expect(posts).toHaveLength(2)
     expect(posts[1].key).toBe(posts[0].key)
     expect(posts[1].body.note).toBe('rent')
+  })
+
+  it('a completed hold the server refuses does not stay on "Keep holding…", even if the release never arrives', async () => {
+    answers = [[403, apiError('INVALID_PIN', { attemptsLeft: 2 })]]
+    const { button } = await ready()
+    fakeTimers()
+    fireEvent.pointerDown(button, { button: 0, pointerId: 1 }) // no pointerup: a button disabled mid-hold may never get one
+    wait(HOLD_MS)
+    realTimers()
+    expect(await screen.findByText('Wrong PIN. 2 attempts left before your account locks.')).toBeInTheDocument()
+    expect(button).not.toHaveTextContent(en.transfer.keepHolding)
+    expect(button).toHaveAttribute('data-holding', 'false')
+  })
+
+  it('pointer down, then Enter held and let go at 600 ms: the release cancels, nothing is sent by 1200 ms', async () => {
+    const { user, button } = await ready()
+    act(() => button.focus())
+    fakeTimers()
+    await user.pointer({ keys: '[MouseLeft>]', target: button })
+    await user.keyboard('{Enter>}')
+    wait(600)
+    await user.keyboard('{/Enter}')
+    wait(HOLD_MS - 600)
+    expectNothingSent()
+  })
+})
+
+describe('while the money POST is pending', () => {
+  /** Every mutation in the cache whose state (variables, data, error, context) or options contain the PIN. */
+  const withPin = (queryClient: ReturnType<typeof renderRoutes>['queryClient']) =>
+    queryClient
+      .getMutationCache()
+      .getAll()
+      .filter((m) => m.state.variables !== undefined || JSON.stringify([m.state, m.options]).includes('48213'))
+
+  it('the PIN is never kept in the mutation cache: after INVALID_PIN and Back', async () => {
+    answers = [[403, apiError('INVALID_PIN', { attemptsLeft: 2 })]]
+    const { user, queryClient } = await renderPage('/send-money')
+    await enterDetails(user)
+    await atConfirm()
+    await submitPin(user)
+    await screen.findByText('Wrong PIN. 2 attempts left before your account locks.')
+    expect(withPin(queryClient)).toEqual([])
+    await user.click(screen.getByRole('button', { name: en.common.back }))
+    expect(receiverField()).toHaveValue('01800000003')
+    expect(withPin(queryClient)).toEqual([])
+  })
+
+  it('the PIN is never kept in the mutation cache: after a successful send', async () => {
+    const { user, queryClient } = await renderPage('/send-money')
+    await enterDetails(user)
+    await atConfirm()
+    await submitPin(user)
+    await screen.findByText('PP7K2M9QXA')
+    expect(posts[0].body.pin).toBe('48213') // it did go in the request
+    expect(withPin(queryClient)).toEqual([])
+  })
+
+  it('the system Back and closing the tab are blocked; once the POST settles, both work again', async () => {
+    let release!: () => void
+    const held = new Promise<void>((resolve) => (release = resolve))
+    server.use(
+      http.post('/api/v1/transactions/send-money', async () => {
+        await held
+        return HttpResponse.json(apiError('INVALID_PIN', { attemptsLeft: 2 }), { status: 403 })
+      }),
+    )
+    /** Whether leaving the page would now ask first (a beforeunload listener cancels the event). */
+    const unloadGuarded = () => {
+      const event = new Event('beforeunload', { cancelable: true })
+      window.dispatchEvent(event)
+      return event.defaultPrevented
+    }
+    const { user, router } = await renderPage('/send-money', ['/'])
+    await enterDetails(user)
+    await atConfirm()
+    expect(unloadGuarded()).toBe(false)
+    await submitPin(user)
+    await screen.findByRole('button', { name: sendHoldLabel(), busy: true })
+    expect(unloadGuarded()).toBe(true)
+
+    await act(async () => void (await router.navigate(-1)))
+    expect(router.state.location.pathname).toBe('/send-money')
+    expect(screen.getByText(en.transfer.total)).toBeInTheDocument() // still Confirm, still pending
+    expect(pinField()).toBeDisabled()
+
+    release()
+    await screen.findByText('Wrong PIN. 2 attempts left before your account locks.')
+    expect(router.state.location.pathname).toBe('/send-money') // the blocked Back was dropped, not queued
+    expect(unloadGuarded()).toBe(false)
+    await act(async () => void (await router.navigate(-1)))
+    expect(router.state.location.pathname).toBe('/')
   })
 })

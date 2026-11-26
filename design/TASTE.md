@@ -76,7 +76,7 @@
   no letter spacing. Anek's own word space is narrow (0.17 em vs Hind's 0.24 em), so titles look
   tighter than body text; that is the font, not a bug. Don't add negative tracking or narrow them.
 - Sizes: `text-xs`, `text-sm`, `text-base`, `text-lg`, `text-xl`, `text-3xl`; `text-4xl` for the
-  Home balance; `text-hero` (64px) for the keypad amount and the Sent amount. At most four sizes on
+  Home balance, Confirm's total and the receipt page amount; `text-hero` (64px) for the keypad amount and the Sent amount. At most four sizes on
   one screen. Inputs are always `text-base` or larger so phones do not zoom in.
 - At most two font weights on one screen (`font-normal` or `font-medium`, plus `font-semibold`).
 - Spacing steps: 1, 2, 3, 4, 6, 8, 12, 16. Page padding is `px-6`. Related items `gap-2` or

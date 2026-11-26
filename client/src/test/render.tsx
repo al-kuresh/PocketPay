@@ -8,9 +8,9 @@ import { createQueryClient } from '../api/queryClient'
 import { ToastProvider } from '../components/ui/Toast'
 import { routes } from '../routes/router'
 
-/** The whole app at `path`, with the same providers as App.tsx and a fresh query cache per test. */
-export function renderRoutes(path: string) {
-  const router = createMemoryRouter(routes, { initialEntries: [path] })
+/** The whole app at `path` (after the `history` entries, for Back), with the same providers as App.tsx and a fresh query cache per test. */
+export function renderRoutes(path: string, history: string[] = []) {
+  const router = createMemoryRouter(routes, { initialEntries: [...history, path] })
   const queryClient = createQueryClient()
   render(
     <QueryClientProvider client={queryClient}>
@@ -27,8 +27,8 @@ export function renderRoutes(path: string) {
 }
 
 /** renderRoutes for a lazy (code-split) page: resolves once its chunk has loaded and the Suspense skeleton is gone. */
-export async function renderPage(path: string) {
-  const rendered = renderRoutes(path)
+export async function renderPage(path: string, history: string[] = []) {
+  const rendered = renderRoutes(path, history)
   await waitFor(() => {
     if (document.querySelector('[aria-busy="true"]')) throw new Error(`${path} is still loading`)
   })
