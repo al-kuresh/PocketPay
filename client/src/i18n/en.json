@@ -18,19 +18,23 @@
   "flows": {
     "SEND_MONEY": {
       "title": "Send Money",
-      "receiver": "Receiver's number"
+      "receiver": "Receiver's number",
+      "hold": "Hold to send {{amount}}"
     },
     "CASH_OUT": {
       "title": "Cash Out",
-      "receiver": "Agent's number"
+      "receiver": "Agent's number",
+      "hold": "Hold to cash out {{amount}}"
     },
     "PAYMENT": {
       "title": "Payment",
-      "receiver": "Merchant's number"
+      "receiver": "Merchant's number",
+      "hold": "Hold to pay {{amount}}"
     },
     "CASH_IN": {
       "title": "Cash In",
-      "receiver": "Customer's number"
+      "receiver": "Customer's number",
+      "hold": "Hold to cash in {{amount}}"
     },
     "FLOAT_TOPUP": {
       "title": "Float top-up"
@@ -52,7 +56,8 @@
     "profile": "Profile"
   },
   "amount": {
-    "invalid": "Enter an amount like 500 or 1,500.50."
+    "keypad": "Amount keypad",
+    "delete": "Delete"
   },
   "imagePicker": {
     "choose": "Take or choose a photo",
@@ -194,12 +199,17 @@
   },
   "home": {
     "balance": "Balance",
-    "showBalance": "Show balance",
+    "showBalance": "Tap to see balance",
     "recent": "Recent transactions",
     "seeAll": "See all",
     "empty": "No transactions yet",
     "emptyBody": "Money you send or receive shows up here.",
-    "eMoney": "E-money balance"
+    "eMoney": "E-money balance",
+    "greeting": {
+      "morning": "Good morning",
+      "afternoon": "Good afternoon",
+      "evening": "Good evening"
+    }
   },
   "transfer": {
     "amount": "Amount",
@@ -210,14 +220,12 @@
       "AGENT": "Enter an agent's number.",
       "MERCHANT": "Enter a merchant's number."
     },
-    "from": "From",
     "to": "To",
     "fee": "Fee",
     "total": "Total",
     "pin": "Enter your PIN",
-    "confirm": "Confirm",
-    "tryAgain": "Try again",
-    "success": "Successful",
+    "holdRetry": "Hold to try again {{amount}}",
+    "success": "Money sent",
     "trxId": "TrxID",
     "balanceAfter": "New balance",
     "time": "Time",
@@ -225,7 +233,17 @@
     "share": "Share",
     "copied": "TrxID copied.",
     "copyByHand": "Copy it by hand: {{trxId}}",
-    "shareText": "PocketPay TrxID: {{trxId}}"
+    "shareText": "PocketPay TrxID: {{trxId}}",
+    "change": "Change",
+    "feeLine": "Fee {{fee}}",
+    "noFee": "No fee",
+    "checkTitle": "Check and send",
+    "keepHolding": "Keep holding…",
+    "holdHint": "Press and hold · let go to cancel",
+    "totalPaid": "Total paid",
+    "received": "Received",
+    "sentTo": "to",
+    "receivedFrom": "from"
   },
   "history": {
     "type": "Type",

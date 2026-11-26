@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { ReceiptText } from 'lucide-react'
-import { useId, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { history } from '../../api/transactions'
 import type { HistoryItem, Role } from '../../api/types'
@@ -21,10 +21,13 @@ const TYPES: Record<Role, ReadonlyArray<HistoryItem['type']>> = {
   ADMIN: [],
 }
 
+const CHIP =
+  // relative: the sr-only radio is absolute; inside a chip it scrolls (and clips) with it instead of widening the page.
+  'relative flex min-h-11 shrink-0 cursor-pointer items-center rounded-full border border-border-strong bg-surface px-4 text-sm text-text transition duration-150 ease-out-quint active:scale-95 has-checked:border-primary-dark has-checked:bg-primary-50 has-checked:font-semibold has-checked:text-primary-darker has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-primary-dark'
+
 /** Every transaction, newest first, a page at a time (`nextCursor`). Filters: type, and a date range in Dhaka days. */
 export function History() {
   const { t } = useTranslation()
-  const typeId = useId()
   const role = useSession((s) => s.user?.role)
   // '' = no filter. Dates are the inputs' own YYYY-MM-DD, which the API reads as Dhaka days.
   const [filters, setFilters] = useState({ type: '', from: '', to: '' })
@@ -40,26 +43,28 @@ export function History() {
   const set = (patch: Partial<typeof filters>) => setFilters((f) => ({ ...f, ...patch }))
 
   return (
-    <AppShell title={t('nav.history')} nav>
+    <AppShell title={t('nav.history')} nav canvas>
       <div className="flex flex-col gap-3">
-        <div className="flex flex-col gap-2">
-          <label htmlFor={typeId} className="text-sm text-text">
-            {t('history.type')}
-          </label>
-          <select
-            id={typeId}
-            value={filters.type}
-            onChange={(e) => set({ type: e.target.value })}
-            className="h-12 rounded-xl border border-border-strong bg-surface px-4 text-base text-text"
-          >
-            <option value="">{t('history.all')}</option>
-            {(role ? TYPES[role] : []).map((type) => (
-              <option key={type} value={type}>
-                {t(`flows.${type}.title`)}
-              </option>
+        {/* Chips: one radio per type (the same pattern as registration's account type), scrolling sideways if they don't fit. */}
+        {/* min-w-0: a fieldset is min-content wide by default, so the chips would widen the whole page (and push the fixed nav off a phone screen). */}
+        <fieldset className="flex min-w-0 flex-col gap-2">
+          <legend className="mb-2 text-sm text-text">{t('history.type')}</legend>
+          <div className="-mx-6 flex gap-2 overflow-x-auto px-6">
+            {['', ...(role ? TYPES[role] : [])].map((type) => (
+              <label key={type} className={CHIP}>
+                <input
+                  type="radio"
+                  name="type"
+                  value={type}
+                  checked={filters.type === type}
+                  onChange={() => set({ type })}
+                  className="sr-only"
+                />
+                {type ? t(`flows.${type}.title`) : t('history.all')}
+              </label>
             ))}
-          </select>
-        </div>
+          </div>
+        </fieldset>
         <div className="grid grid-cols-2 gap-3">
           <Input label={t('history.from')} type="date" value={filters.from} max={filters.to || today} onChange={(e) => set({ from: e.target.value })} />
           <Input label={t('history.to')} type="date" value={filters.to} min={filters.from || undefined} max={today} onChange={(e) => set({ to: e.target.value })} />
@@ -76,7 +81,7 @@ export function History() {
         <EmptyState icon={ReceiptText} title={t('history.empty')} message={t('history.emptyBody')} />
       ) : (
         <div className="flex flex-col gap-3">
-          <ul className="flex flex-col divide-y divide-border">
+          <ul className="flex flex-col divide-y divide-border rounded-3xl border border-border bg-surface px-4">
             {items.map((item) => (
               <HistoryRow key={item.trxId} item={item} />
             ))}

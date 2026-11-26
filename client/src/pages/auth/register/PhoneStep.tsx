@@ -43,7 +43,7 @@ export function PhoneStep({ defaultPhone, notice, onDone }: PhoneStepProps) {
   return (
     <form noValidate onSubmit={handleSubmit(submit)} className="flex flex-1 flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <h2 className="text-xl font-semibold text-text">{t('register.phone.heading')}</h2>
+        <h2 className="font-display text-xl font-semibold text-text">{t('register.phone.heading')}</h2>
         <p className="text-sm text-text-muted">{t('register.phone.hint')}</p>
       </div>
       <PhoneInput label={t('register.phone.label')} error={errors.phone && t(errors.phone.message ?? '')} {...register('phone')} />

@@ -62,7 +62,7 @@ export function ImagePicker({ label, capture, onChange, error }: ImagePickerProp
         </div>
       ) : (
         <label
-          className={`flex h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed bg-surface-sunken text-sm text-text focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary-dark ${shownError ? 'border-danger' : 'border-border-strong'}`}
+          className={`flex h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border bg-surface-sunken text-sm text-text focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary-dark ${shownError ? 'border-danger' : 'border-border-strong'}`}
         >
           <Camera aria-hidden className="size-6 text-primary" />
           {t('imagePicker.choose')}

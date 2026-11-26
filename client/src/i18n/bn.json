@@ -18,19 +18,23 @@
   "flows": {
     "SEND_MONEY": {
       "title": "সেন্ড মানি",
-      "receiver": "প্রাপকের নম্বর"
+      "receiver": "প্রাপকের নম্বর",
+      "hold": "{{amount}} পাঠাতে চেপে ধরুন"
     },
     "CASH_OUT": {
       "title": "ক্যাশ আউট",
-      "receiver": "এজেন্টের নম্বর"
+      "receiver": "এজেন্টের নম্বর",
+      "hold": "{{amount}} ক্যাশ আউট করতে চেপে ধরুন"
     },
     "PAYMENT": {
       "title": "পেমেন্ট",
-      "receiver": "মার্চেন্টের নম্বর"
+      "receiver": "মার্চেন্টের নম্বর",
+      "hold": "{{amount}} পেমেন্ট করতে চেপে ধরুন"
     },
     "CASH_IN": {
       "title": "ক্যাশ ইন",
-      "receiver": "গ্রাহকের নম্বর"
+      "receiver": "গ্রাহকের নম্বর",
+      "hold": "{{amount}} ক্যাশ ইন করতে চেপে ধরুন"
     },
     "FLOAT_TOPUP": {
       "title": "ফ্লোট টপ-আপ"
@@ -52,7 +56,8 @@
     "profile": "প্রোফাইল"
   },
   "amount": {
-    "invalid": "৫০০ বা ১,৫০০.৫০ এভাবে টাকার পরিমাণ লিখুন।"
+    "keypad": "টাকার কীপ্যাড",
+    "delete": "মুছুন"
   },
   "imagePicker": {
     "choose": "ছবি তুলুন বা বেছে নিন",
@@ -194,12 +199,17 @@
   },
   "home": {
     "balance": "ব্যালেন্স",
-    "showBalance": "ব্যালেন্স দেখুন",
+    "showBalance": "ব্যালেন্স দেখতে ট্যাপ করুন",
     "recent": "সাম্প্রতিক লেনদেন",
     "seeAll": "সব দেখুন",
     "empty": "এখনো কোনো লেনদেন নেই",
     "emptyBody": "আপনি টাকা পাঠালে বা পেলে তা এখানে দেখা যাবে।",
-    "eMoney": "ই-মানি ব্যালেন্স"
+    "eMoney": "ই-মানি ব্যালেন্স",
+    "greeting": {
+      "morning": "শুভ সকাল",
+      "afternoon": "শুভ বিকেল",
+      "evening": "শুভ সন্ধ্যা"
+    }
   },
   "transfer": {
     "amount": "টাকার পরিমাণ",
@@ -210,14 +220,12 @@
       "AGENT": "একজন এজেন্টের নম্বর দিন।",
       "MERCHANT": "একজন মার্চেন্টের নম্বর দিন।"
     },
-    "from": "প্রেরক",
     "to": "প্রাপক",
     "fee": "চার্জ",
     "total": "মোট",
     "pin": "আপনার পিন দিন",
-    "confirm": "নিশ্চিত করুন",
-    "tryAgain": "আবার চেষ্টা করুন",
-    "success": "লেনদেন সফল হয়েছে",
+    "holdRetry": "{{amount}} আবার পাঠাতে চেপে ধরুন",
+    "success": "টাকা পাঠানো হয়েছে",
     "trxId": "TrxID",
     "balanceAfter": "নতুন ব্যালেন্স",
     "time": "সময়",
@@ -225,7 +233,17 @@
     "share": "শেয়ার করুন",
     "copied": "TrxID কপি করা হয়েছে।",
     "copyByHand": "নিজে কপি করুন: {{trxId}}",
-    "shareText": "PocketPay TrxID: {{trxId}}"
+    "shareText": "PocketPay TrxID: {{trxId}}",
+    "change": "পরিবর্তন",
+    "feeLine": "চার্জ {{fee}}",
+    "noFee": "কোনো চার্জ নেই",
+    "checkTitle": "যাচাই করে পাঠান",
+    "keepHolding": "ধরে রাখুন…",
+    "holdHint": "চেপে ধরে রাখুন · বাতিল করতে ছেড়ে দিন",
+    "totalPaid": "মোট পরিশোধ",
+    "received": "পেয়েছেন",
+    "sentTo": "প্রাপক:",
+    "receivedFrom": "প্রেরক:"
   },
   "history": {
     "type": "লেনদেনের ধরন",

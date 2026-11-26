@@ -36,7 +36,7 @@ export function Profile() {
 
   if (!user) return null
   return (
-    <AppShell title={t('nav.profile')} nav>
+    <AppShell title={t('nav.profile')} nav canvas>
       <div className="flex items-center gap-4">
         {user.profilePhotoUrl ? (
           <img src={user.profilePhotoUrl} alt={t('profile.photo')} className="size-16 rounded-full border border-border object-cover" />
@@ -46,7 +46,7 @@ export function Profile() {
           </span>
         )}
         <div className="flex min-w-0 flex-col gap-1">
-          <p className="truncate text-lg font-semibold text-text">{user.name}</p>
+          <p className="truncate font-display text-xl font-semibold text-text">{user.name}</p>
           <p className="text-sm tabular-nums text-text-muted">{user.phone}</p>
         </div>
       </div>

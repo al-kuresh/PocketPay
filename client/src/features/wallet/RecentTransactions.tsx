@@ -6,9 +6,10 @@ import { Link } from 'react-router'
 import { history } from '../../api/transactions'
 import type { HistoryItem } from '../../api/types'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { Initials } from '../../components/ui/Initials'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { errorMessage } from '../../i18n/errors'
-import { formatDateTime } from '../../lib/dates'
+import { formatWhen } from '../../lib/dates'
 import { formatTaka } from '../../lib/money'
 import { useLanguage } from '../../stores/language'
 
@@ -21,10 +22,10 @@ export function RecentTransactions() {
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <h2 id={headingId} className="text-lg font-semibold text-text">
+        <h2 id={headingId} className="font-display text-lg font-semibold text-text">
           {t('home.recent')}
         </h2>
-        <Link to="/history" className="flex min-h-11 min-w-11 items-center justify-end text-sm text-primary-dark">
+        <Link to="/history" className="flex min-h-11 min-w-11 items-center justify-end text-sm font-semibold text-primary-dark">
           {t('home.seeAll')}
         </Link>
       </div>
@@ -37,7 +38,7 @@ export function RecentTransactions() {
       ) : recent.data.items.length === 0 ? (
         <EmptyState icon={ReceiptText} title={t('home.empty')} message={t('home.emptyBody')} />
       ) : (
-        <ul className="flex flex-col divide-y divide-border">
+        <ul className="flex flex-col divide-y divide-border rounded-3xl border border-border bg-surface px-4">
           {recent.data.items.map((item) => (
             <HistoryRow key={item.trxId} item={item} />
           ))}
@@ -57,7 +58,7 @@ export function HistorySkeleton() {
   )
 }
 
-/** One history row: who, what and when; the amount signed (+ in, − out) and coloured. Tapping it opens the receipt. */
+/** One history row: initials tinted by direction, who, what and when ("7:42 pm", "Yesterday", "23 Nov"); the amount signed (+ in, − out) and coloured. Tapping it opens the receipt. */
 export function HistoryRow({ item }: { item: HistoryItem }) {
   const { t } = useTranslation()
   const lang = useLanguage((s) => s.lang)
@@ -66,15 +67,16 @@ export function HistoryRow({ item }: { item: HistoryItem }) {
     <li>
       <Link
         to={`/transactions/${item.trxId}`}
-        className="flex min-h-11 items-center justify-between gap-3 py-3 transition-colors duration-150 ease-out-quint hover:bg-surface-sunken"
+        className="flex min-h-11 items-center gap-3 py-3 transition-colors duration-150 ease-out-quint hover:bg-surface-sunken"
       >
-        <span className="flex min-w-0 flex-col gap-1">
-          <span className="truncate text-sm font-semibold text-text">{item.counterparty.name}</span>
+        <Initials name={item.counterparty.name} incoming={!out} />
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="truncate text-base text-text">{item.counterparty.name}</span>
           <span className="text-sm text-text-muted">
-            {t(`flows.${item.type}.title`)} · {formatDateTime(item.createdAt, lang)}
+            {t(`flows.${item.type}.title`)} · {formatWhen(item.createdAt, lang)}
           </span>
         </span>
-        <span className={`shrink-0 text-sm font-semibold tabular-nums ${out ? 'text-danger' : 'text-success-dark'}`}>
+        <span className={`shrink-0 font-display text-base font-semibold tabular-nums ${out ? 'text-danger' : 'text-success-dark'}`}>
           {formatTaka(item.amount, { sign: out ? 'out' : 'in', lang })}
         </span>
       </Link>

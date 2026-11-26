@@ -11,9 +11,10 @@ const VARIANTS: Record<Variant, { base: string; on: string; off: string }> = {
     on: 'bg-primary-dark text-white hover:bg-primary-darker active:scale-95',
     off: 'bg-surface-sunken text-text-muted',
   },
+  // Outlined in the brand colour (the Sent screen's "Share" next to "Done").
   secondary: {
     base: 'h-14 w-full rounded-2xl border bg-surface font-semibold',
-    on: 'border-border-strong text-text hover:bg-surface-sunken active:scale-95',
+    on: 'border-primary-dark text-primary-dark hover:bg-primary-50 active:scale-95',
     off: 'border-border text-text-muted',
   },
   ghost: { base: 'rounded-xl px-3', on: 'text-primary-dark hover:bg-primary-50', off: 'text-text-muted' },

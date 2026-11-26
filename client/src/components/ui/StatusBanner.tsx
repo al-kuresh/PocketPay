@@ -13,7 +13,7 @@ export function StatusBanner({ kind }: { kind: Kind }) {
   const { t } = useTranslation()
   if (kind === 'DEMO') {
     return (
-      <div className="flex gap-3 rounded-xl bg-primary-50 p-4">
+      <div className="flex gap-3 rounded-3xl bg-primary-50 p-4">
         <ShieldAlert aria-hidden className="size-5 shrink-0 text-primary" />
         <p className="text-sm text-text">{t('kyc.demo')}</p>
       </div>
@@ -21,7 +21,7 @@ export function StatusBanner({ kind }: { kind: Kind }) {
   }
   const { Icon, border, text, key } = STATUS[kind]
   return (
-    <div className={`flex gap-3 rounded-xl border bg-surface p-4 ${border}`}>
+    <div className={`flex gap-3 rounded-3xl border bg-surface p-4 ${border}`}>
       <Icon aria-hidden className={`size-5 shrink-0 ${text}`} />
       <div className="flex flex-col gap-1">
         <p className={`text-sm font-semibold ${text}`}>{t(`${key}.title`)}</p>

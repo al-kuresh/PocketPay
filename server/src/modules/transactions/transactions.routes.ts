@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requireAuth, requireRole } from '../../middlewares/auth';
 import { requireIdempotencyKey } from '../../middlewares/idempotency';
-import { moneyLimiter } from '../../middlewares/rateLimit';
+import { moneyLimiter, previewLimiter } from '../../middlewares/rateLimit';
 import { validateBody, validateParams, validateQuery } from '../../middlewares/validate';
 import { FLOWS, type FlowType } from './flows';
 import { history, preview, receipt, transfer } from './transactions.controller';
@@ -33,7 +33,7 @@ transactionsRouter.post(
   '/preview',
   requireAuth,
   requireRole('CUSTOMER', 'AGENT'),
-  moneyLimiter,
+  previewLimiter,
   validateBody(previewBody),
   preview,
 );

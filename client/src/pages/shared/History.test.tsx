@@ -1,11 +1,14 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HistoryItem } from '../../api/types'
 import en from '../../i18n/en.json'
 import { useSession } from '../../stores/session'
 import { renderRoutes } from '../../test/render'
 import { apiError, server, testUser } from '../../test/server'
+
+/** A whole line of text, even when part of it (the name) is its own element. */
+const line = (text: string) => (_: string, el: Element | null) => el?.tagName === 'P' && el.textContent === text
 
 const item = (trxId: string, overrides: Partial<HistoryItem> = {}): HistoryItem => ({
   trxId,
@@ -78,11 +81,21 @@ describe('History', () => {
   it('the type filter sends type=CASH_OUT, from the first page again', async () => {
     const { user } = renderRoutes('/history')
     await screen.findByText('Karim H***')
-    await user.selectOptions(screen.getByLabelText(en.history.type), 'CASH_OUT')
+    await user.click(screen.getByRole('radio', { name: en.flows.CASH_OUT.title }))
+    expect(screen.getByRole('radio', { name: en.flows.CASH_OUT.title })).toBeChecked()
     await screen.findByText('Karim H***')
     const last = queries.at(-1)!
     expect(last.get('type')).toBe('CASH_OUT')
     expect(last.get('cursor')).toBeNull()
+  })
+
+  it('arrow keys move between the chips: ArrowRight from "All types" checks the next type and asks the server for it', async () => {
+    const { user } = renderRoutes('/history')
+    await screen.findByText('Karim H***')
+    act(() => screen.getByRole('radio', { name: en.history.all }).focus())
+    await user.keyboard('{ArrowRight}')
+    expect(screen.getByRole('radio', { name: en.flows.SEND_MONEY.title })).toBeChecked()
+    await waitFor(() => expect(queries.at(-1)?.get('type')).toBe('SEND_MONEY'))
   })
 
   it.each([
@@ -92,9 +105,11 @@ describe('History', () => {
   ] as const)('the type filter offers a %s only the types it can have', async (role, types) => {
     useSession.getState().signIn({ user: testUser({ role }), accessToken: 't' })
     renderRoutes('/history')
-    const options = within(await screen.findByLabelText(en.history.type)).getAllByRole('option')
-    expect(options.map((o) => (o as HTMLOptionElement).value)).toEqual(['', ...types])
-    expect(options.map((o) => o.textContent)).toEqual([en.history.all, ...types.map((type) => en.flows[type].title)])
+    // Chips: one radio per type, "All types" first and chosen.
+    const options = within(await screen.findByRole('group', { name: en.history.type })).getAllByRole('radio')
+    expect(options.map((o) => (o as HTMLInputElement).value)).toEqual(['', ...types])
+    expect(options.map((o) => o.closest('label')?.textContent)).toEqual([en.history.all, ...types.map((type) => en.flows[type].title)])
+    expect(options[0]).toBeChecked()
   })
 
   it('the date filter sends from and to as YYYY-MM-DD', async () => {
@@ -144,7 +159,75 @@ describe('History', () => {
   })
 })
 
+describe('row times', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('are relative, by the Dhaka day: the time today, then "Yesterday", then the date', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-25T10:00:00Z')) // 16:00 in Dhaka
+    const items = [
+      item('PP7K2M9QXA', { createdAt: '2026-11-25T01:42:00Z' }), // 07:42 today
+      item('PPM3W8R2NE', { createdAt: '2026-11-24T17:59:00Z' }), // 23:59 yesterday (but the 24th in UTC too)
+      item('PPA2B3C4DE', { createdAt: '2026-11-23T17:59:00Z' }), // 23:59 on the 23rd
+    ]
+    server.use(http.get('/api/v1/transactions', () => HttpResponse.json({ success: true, data: { items, nextCursor: null } })))
+    renderRoutes('/history')
+    expect(await screen.findByText(`${en.flows.SEND_MONEY.title} · 7:42 am`)).toBeInTheDocument()
+    expect(screen.getByText(`${en.flows.SEND_MONEY.title} · Yesterday`)).toBeInTheDocument()
+    expect(screen.getByText(`${en.flows.SEND_MONEY.title} · 23 Nov`)).toBeInTheDocument()
+  })
+})
+
 describe('Receipt', () => {
+  const receiptOf = (overrides: Record<string, unknown> = {}) => ({
+    trxId: 'PP7K2M9QXA',
+    type: 'SEND_MONEY',
+    status: 'COMPLETED',
+    amount: '50000',
+    fee: '500',
+    note: null,
+    createdAt: '2026-11-25T04:12:09.512Z',
+    from: { name: 'Test U***', phone: '01700000000', role: 'CUSTOMER' },
+    to: { name: 'Karim H***', phone: '01800000003', role: 'CUSTOMER' },
+    mine: { amount: '-50500', balanceAfter: '949500' },
+    ...overrides,
+  })
+  const value = (label: string) => screen.getByText(label).nextElementSibling
+
+  it('the same receipt card as the Sent screen: to whom, the amount, TrxID, time, fee, total paid, a stitched tear line, the new balance', async () => {
+    server.use(http.get('/api/v1/transactions/:trxId', () => HttpResponse.json({ success: true, data: receiptOf() })))
+    renderRoutes('/transactions/PP7K2M9QXA')
+    expect(await screen.findByRole('heading', { name: en.flows.SEND_MONEY.title })).toBeInTheDocument()
+    expect(screen.getByText(line('to Karim H*** · 01800000003'))).toBeInTheDocument()
+    expect(screen.getByText('৳500.00')).toHaveClass('font-amount')
+    expect(value(en.transfer.trxId)).toHaveTextContent('PP7K2M9QXA')
+    expect(value(en.transfer.time)).toHaveTextContent('25 Nov 2026, 10:12 am')
+    expect(value(en.transfer.fee)).toHaveTextContent('৳5.00')
+    expect(value(en.transfer.totalPaid)).toHaveTextContent('−৳505.00')
+    expect(document.querySelector('svg line[stroke-dasharray="7 9"]')).not.toBeNull()
+    expect(value(en.transfer.balanceAfter)).toHaveTextContent('৳9,495.00')
+    expect(screen.getByRole('button', { name: en.transfer.share })).toBeInTheDocument()
+  })
+
+  it('money in: "Received" and a green +amount, from whom', async () => {
+    const data = receiptOf({
+      type: 'CASH_IN',
+      amount: '1000000',
+      fee: '0',
+      from: { name: 'Demo A***', phone: '01800000004', role: 'AGENT' },
+      to: { name: 'Test U***', phone: '01700000000', role: 'CUSTOMER' },
+      mine: { amount: '1000000', balanceAfter: '1949500' },
+    })
+    server.use(http.get('/api/v1/transactions/:trxId', () => HttpResponse.json({ success: true, data })))
+    renderRoutes('/transactions/PP7K2M9QXA')
+    expect(await screen.findByText(line('from Demo A*** · 01800000004'))).toBeInTheDocument()
+    expect(value(en.transfer.received)).toHaveTextContent('+৳10,000.00')
+    expect(screen.getByText('+৳10,000.00')).toHaveClass('text-success-dark')
+    expect(screen.queryByText(en.transfer.totalPaid)).not.toBeInTheDocument()
+  })
+
   it("someone else's (or no such) transaction: the 404 → a translated not-found page, asked once (no retry)", async () => {
     let calls = 0
     server.use(

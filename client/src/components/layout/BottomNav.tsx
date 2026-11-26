@@ -1,10 +1,10 @@
-import { History as HistoryIcon, House, User } from 'lucide-react'
+import { House, List, User } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { NavLink } from 'react-router'
 
 const ITEMS = [
   { to: '/', key: 'nav.home', Icon: House },
-  { to: '/history', key: 'nav.history', Icon: HistoryIcon },
+  { to: '/history', key: 'nav.history', Icon: List },
   { to: '/profile', key: 'nav.profile', Icon: User },
 ] as const
 

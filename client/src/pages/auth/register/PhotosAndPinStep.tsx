@@ -75,7 +75,7 @@ export function PhotosAndPinStep({ registrationToken, identity, onExpired }: Pho
   const message = (key?: string) => key && t(key)
   return (
     <form noValidate onSubmit={(e) => void handleSubmit(submit)(e)} className="flex flex-1 flex-col gap-6">
-      <h2 className="text-xl font-semibold text-text">{t('register.photos.heading')}</h2>
+      <h2 className="font-display text-xl font-semibold text-text">{t('register.photos.heading')}</h2>
       <StatusBanner kind="DEMO" />
       {PHOTOS.map((p) => (
         <Controller

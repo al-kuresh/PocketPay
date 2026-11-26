@@ -1,3 +1,4 @@
+import { Lock } from 'lucide-react'
 import { useId, useImperativeHandle, useRef, useState, type ChangeEvent, type Ref } from 'react'
 import { toAsciiDigits } from '../../lib/digits'
 
@@ -14,6 +15,8 @@ interface PinInputProps {
   onChange?(pin: string): void
   onComplete?(pin: string): void
   disabled?: boolean
+  /** A lock icon beside the label (Confirm: the PIN that authorises a payment). */
+  lock?: boolean
   autoFocus?: boolean
   ref?: Ref<PinInputHandle>
 }
@@ -25,7 +28,7 @@ const LENGTH = 5
  * keypad and password-manager behaviour all work. The input is uncontrolled: the PIN is never a React prop,
  * never a DOM attribute and never text. The boxes only know how many digits there are.
  */
-export function PinInput({ label, error, onChange, onComplete, disabled, autoFocus, ref }: PinInputProps) {
+export function PinInput({ label, error, onChange, onComplete, disabled, autoFocus, lock = false, ref }: PinInputProps) {
   const id = useId()
   const inputRef = useRef<HTMLInputElement>(null)
   const [count, setCount] = useState(0)
@@ -55,16 +58,18 @@ export function PinInput({ label, error, onChange, onComplete, disabled, autoFoc
 
   return (
     <div className="flex flex-col gap-2">
-      <label htmlFor={id} className="text-sm text-text">
+      <label htmlFor={id} className="flex items-center gap-2 text-sm text-text">
+        {lock && <Lock aria-hidden className="size-5 text-primary-dark" />}
         {label}
       </label>
-      <div className="relative flex gap-3 self-start rounded-xl focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary-dark">
+      {/* The five boxes share the full width, like the canvas. */}
+      <div className="relative grid w-full grid-cols-5 gap-3 rounded-xl focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary-dark">
         {Array.from({ length: LENGTH }, (_, i) => (
           <div
             key={i}
             aria-hidden
             data-filled={i < count}
-            className={`flex size-12 items-center justify-center rounded-xl border bg-surface ${error ? 'border-danger' : 'border-border-strong'}`}
+            className={`flex h-14 items-center justify-center rounded-xl border bg-surface ${error ? 'border-danger' : 'border-border-strong'}`}
           >
             {i < count && <span className="size-3 rounded-full bg-text" />}
           </div>

@@ -8,10 +8,10 @@ import en from '../../i18n/en.json'
 import { useLanguage } from '../../stores/language'
 import { AppShell } from '../layout/AppShell'
 import { BottomNav } from '../layout/BottomNav'
-import { AmountInput } from './AmountInput'
 import { Button } from './Button'
 import { Card } from './Card'
 import { EmptyState } from './EmptyState'
+import { HOLD_MS, HoldToSendButton } from './HoldToSendButton'
 import { ImagePicker } from './ImagePicker'
 import { Input } from './Input'
 import { LanguageToggle } from './LanguageToggle'
@@ -19,6 +19,7 @@ import { PhoneInput } from './PhoneInput'
 import { PinInput, type PinInputHandle } from './PinInput'
 import { Skeleton } from './Skeleton'
 import { StatusBanner } from './StatusBanner'
+import { Stitch } from './Stitch'
 import { ToastProvider } from './Toast'
 import { useToast } from './toast-context'
 
@@ -84,43 +85,6 @@ describe('PinInput', () => {
     expect(container.textContent).not.toMatch(/[0-9]/)
     expect(container.innerHTML).not.toContain('48213')
     expect(document.querySelectorAll('[data-filled="true"]')).toHaveLength(5)
-  })
-})
-
-describe('AmountInput', () => {
-  function renderAmount() {
-    const onAmountChange = vi.fn()
-    render(<AmountInput label="Amount" onAmountChange={onAmountChange} />)
-    return { onAmountChange, input: screen.getByLabelText('Amount') }
-  }
-
-  it('shows ৳ and reports "1,500.50" as poisha "150050"', () => {
-    const { input, onAmountChange } = renderAmount()
-    expect(screen.getByText('৳')).toBeInTheDocument()
-    fireEvent.change(input, { target: { value: '1,500.50' } })
-    expect(onAmountChange).toHaveBeenLastCalledWith({ text: '1,500.50', poisha: '150050', error: null })
-  })
-
-  it('accepts Bangla digits', () => {
-    const { input, onAmountChange } = renderAmount()
-    fireEvent.change(input, { target: { value: '১৫০০.৫০' } })
-    expect(onAmountChange).toHaveBeenLastCalledWith({ text: '১৫০০.৫০', poisha: '150050', error: null })
-  })
-
-  it('"1.234" reports the error key and shows its message', () => {
-    const { input, onAmountChange } = renderAmount()
-    fireEvent.change(input, { target: { value: '1.234' } })
-    expect(onAmountChange).toHaveBeenLastCalledWith({ text: '1.234', poisha: null, error: 'amount.invalid' })
-    expect(screen.getByRole('alert')).toHaveTextContent(en.amount.invalid)
-    expect(input).toHaveAttribute('aria-invalid', 'true')
-  })
-
-  it('empty is no amount but not an error yet', () => {
-    const { input, onAmountChange } = renderAmount()
-    fireEvent.change(input, { target: { value: '5' } })
-    fireEvent.change(input, { target: { value: '' } })
-    expect(onAmountChange).toHaveBeenLastCalledWith({ text: '', poisha: null, error: null })
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })
 
@@ -278,6 +242,23 @@ describe('Button', () => {
   })
 })
 
+describe('Stitch', () => {
+  it.each([
+    ['rect', 'rect'],
+    ['line', 'line'],
+    ['circle', 'circle'],
+  ] as const)('shape="%s" draws a decorative, round-capped running stitch', (shape, tag) => {
+    const { container } = render(<Stitch shape={shape} className="stroke-thread" />)
+    const svg = container.querySelector('svg')!
+    expect(svg).toHaveAttribute('aria-hidden', 'true')
+    expect(svg).toHaveClass('stroke-thread')
+    const mark = svg.querySelector(tag)!
+    expect(mark).toHaveAttribute('stroke-linecap', 'round')
+    expect(mark).toHaveAttribute('stroke-dasharray', '7 9')
+    expect(mark).toHaveAttribute('fill', 'none')
+  })
+})
+
 describe('Input and PhoneInput', () => {
   it('Input links its label and its error', () => {
     render(<Input label="Name" error="Too short" />)
@@ -337,15 +318,51 @@ describe('Toast', () => {
   })
 })
 
+describe('PinInput: the canvas look', () => {
+  it('the lock icon beside the label only when asked (Confirm), never on Login or Change PIN', () => {
+    const { rerender } = render(<PinInput label="Your PIN" lock />)
+    expect(screen.getByText('Your PIN').closest('label')?.querySelector('svg')).not.toBeNull()
+    rerender(<PinInput label="Your PIN" />)
+    expect(screen.getByText('Your PIN').closest('label')?.querySelector('svg')).toBeNull()
+  })
+
+  it('five boxes across the full width, centred', () => {
+    render(<PinInput label="PIN" />)
+    const row = screen.getByLabelText('PIN').parentElement!
+    expect(row).toHaveClass('grid', 'grid-cols-5', 'w-full')
+    expect(row.querySelectorAll('[data-filled]')).toHaveLength(5)
+  })
+})
+
+describe('HoldToSendButton on a phone', () => {
+  it('a long press never opens the phone menu, the iOS callout or a text selection', () => {
+    render(<HoldToSendButton label="Hold to send ৳5.00" onHold={() => {}} />)
+    const button = screen.getByRole('button', { name: 'Hold to send ৳5.00' })
+    expect(fireEvent.contextMenu(button)).toBe(false) // false: the default (the menu) was prevented
+    expect(button).toHaveClass('callout-none', 'select-none')
+  })
+
+  it('one hold time: the fill reads its duration from HOLD_MS (an inline CSS variable), not a second constant', () => {
+    expect(HOLD_MS).toBe(1200)
+    render(<HoldToSendButton label="Hold" onHold={() => {}} />)
+    expect(screen.getByRole('button', { name: 'Hold' }).style.getPropertyValue('--hold-ms')).toBe('1200ms')
+  })
+})
+
 describe('LanguageToggle', () => {
-  it('switches the language and shows which one is on', () => {
+  it('one pill, named in the other language: a tap switches, and it then offers the first language back', () => {
     render(<LanguageToggle />)
-    const bnButton = screen.getByRole('button', { name: 'বাংলা' })
-    expect(bnButton).toHaveAttribute('aria-pressed', 'false')
-    fireEvent.click(bnButton)
+    expect(screen.getAllByRole('button')).toHaveLength(1)
+    const pill = screen.getByRole('button', { name: 'বাংলা' })
+    expect(pill).toHaveAttribute('lang', 'bn')
+    fireEvent.click(pill)
     expect(useLanguage.getState().lang).toBe('bn')
-    expect(bnButton).toHaveAttribute('aria-pressed', 'true')
     expect(document.documentElement.lang).toBe('bn')
+    expect(pill).toHaveAccessibleName('English')
+    expect(pill).toHaveAttribute('lang', 'en')
+    fireEvent.click(pill)
+    expect(useLanguage.getState().lang).toBe('en')
+    expect(pill).toHaveAccessibleName('বাংলা')
   })
 })
 
@@ -360,7 +377,6 @@ describe('every component renders in bn', () => {
             <StatusBanner kind="REJECTED" />
             <StatusBanner kind="DEMO" />
             <ImagePicker label="ছবি" onChange={() => {}} />
-            <AmountInput label="টাকা" onAmountChange={() => {}} />
             <PinInput label="পিন" />
             <PhoneInput label="ফোন" />
             <Button loading>পাঠান</Button>
@@ -384,8 +400,6 @@ describe('every component renders in bn', () => {
       expect(screen.getByText(text)).toBeInTheDocument()
     }
     expect(screen.getByRole('button', { name: bn.common.back })).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('টাকা'), { target: { value: '1.234' } })
-    expect(screen.getByRole('alert')).toHaveTextContent(bn.amount.invalid)
   })
 })
 

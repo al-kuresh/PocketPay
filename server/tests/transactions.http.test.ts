@@ -358,22 +358,26 @@ describe("a Cash In limit is the customer's: the agent never sees it", () => {
   });
 });
 
-describe('the money rate limit', () => {
-  it('counts per USER across the money POSTs and preview: the 31st → 429, another user still passes', async () => {
-    // Limiters skip when NODE_ENV is 'test'; switch that off for this test only.
+describe('the money and preview rate limits', () => {
+  /** Limiters skip when NODE_ENV is 'test'; switch that off for one test. */
+  async function withLimiters(run: () => Promise<void>) {
     const nodeEnv = env.NODE_ENV;
     env.NODE_ENV = 'development';
     try {
-      // Bodies the limiter counts and validation then refuses (400): cheap, and no PIN is checked.
-      const preview = (as: Actor) =>
-        request(app)
-          .post('/api/v1/transactions/preview')
-          .set('Authorization', `Bearer ${as.token}`)
-          .send({});
-      // One budget for all five routes: 15 sends + 15 previews use it up.
+      await run();
+    } finally {
+      env.NODE_ENV = nodeEnv;
+    }
+  }
+  // Bodies the limiters count and validation then refuses (400): cheap, and no PIN is checked.
+  const preview = (as: Actor) =>
+    request(app).post('/api/v1/transactions/preview').set('Authorization', `Bearer ${as.token}`).send({});
+
+  it('counts per USER across the money POSTs: the 31st → 429, another user still passes', async () => {
+    await withLimiters(async () => {
       for (let i = 1; i <= 15; i++) {
         expect((await post('send-money', {}, { as: rahim })).status, `send ${i}`).toBe(400);
-        expect((await preview(rahim)).status, `preview ${i}`).toBe(400);
+        expect((await post('payment', {}, { as: rahim })).status, `payment ${i}`).toBe(400);
       }
       const blocked = await post('cash-out', {}, { as: rahim });
       expect(blocked.status).toBe(429);
@@ -381,8 +385,21 @@ describe('the money rate limit', () => {
 
       // Same IP (supertest, 127.0.0.1), another user: not limited.
       expect((await post('send-money', {}, { as: karim })).status).toBe(400);
-    } finally {
-      env.NODE_ENV = nodeEnv;
-    }
+    });
+  });
+
+  it('previews have their own budget (60 a minute per user): 31 previews leave the money POSTs alone, the 61st → 429', async () => {
+    await withLimiters(async () => {
+      for (let i = 1; i <= 31; i++) expect((await preview(rahim)).status, `preview ${i}`).toBe(400);
+      expect((await post('send-money', {}, { as: rahim })).status).toBe(400); // not 429: fee checks don't use it up
+
+      for (let i = 32; i <= 60; i++) expect((await preview(rahim)).status, `preview ${i}`).toBe(400);
+      const blocked = await preview(rahim);
+      expect(blocked.status).toBe(429);
+      expect(blocked.body.error.code).toBe('RATE_LIMITED');
+
+      expect((await post('send-money', {}, { as: rahim })).status).toBe(400); // the money budget is still open
+      expect((await preview(karim)).status).toBe(400); // another user: not limited
+    });
   });
 });
