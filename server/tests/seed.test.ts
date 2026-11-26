@@ -1,5 +1,5 @@
-// The seed: system wallets, the fee/limit rules from design §6.3–6.4, and 5 demo accounts whose
-// money is real ledger history. The expected values below are typed from the design tables, not
+// The seed: system wallets, the fee/limit rules from design §6.3–6.4, and 7 demo accounts whose
+// money is real ledger history and whose KYC is real documents and submissions. The expected values below are typed from the design tables, not
 // imported from the seed, so a wrong number in the seed fails here.
 import { spawnSync } from 'node:child_process';
 import request from 'supertest';
@@ -10,9 +10,23 @@ import { prisma } from '../src/lib/prisma';
 import { MemoryStorage } from '../src/lib/storage/memory';
 import { reconcileLedger } from '../src/modules/ledger/reconcile';
 import { resetDb } from './helpers/db';
+import { isWebp } from './helpers/images';
 
 const DEMO_PIN = '48213';
-const DEMO_PHONES = ['01800000001', '01800000002', '01800000003', '01800000004', '01800000005'];
+const DEMO_PHONES = [
+  '01800000001',
+  '01800000002',
+  '01800000003',
+  '01800000004',
+  '01800000005',
+  '01800000006',
+  '01800000007',
+];
+const NON_ADMIN_PHONES = DEMO_PHONES.slice(1);
+const KYC_KEY = /^kyc\/[0-9a-f-]{36}\/(nid-front|nid-back|selfie)-[0-9a-f-]{36}\.webp$/;
+
+// The seed's images go here: tests never write to server/uploads.
+let storage: MemoryStorage;
 
 const EXPECTED_FEES = {
   SEND_MONEY: { flatFee: 500n, percentBp: 0, agentCommissionBp: 0, minAmountForFee: 10_000n },
@@ -67,8 +81,12 @@ const byType = (rows: { type: string; updatedAt: Date }[]) =>
   Object.fromEntries(rows.map((r) => [r.type, { ...r, type: undefined, updatedAt: undefined }]));
 
 async function expectSeededState() {
-  expect(await prisma.user.count()).toBe(5);
-  expect(await prisma.wallet.count()).toBe(6); // 4 user wallets + 2 system
+  expect(await prisma.user.count()).toBe(7);
+  expect(await prisma.wallet.count()).toBe(8); // 6 user wallets + 2 system
+  // 6 non-admin users × (one submission, 3 documents, 3 stored images).
+  expect(await prisma.kycSubmission.count()).toBe(6);
+  expect(await prisma.userDocument.count()).toBe(18);
+  expect(storage.objects.size).toBe(18);
   expect(await prisma.transaction.count()).toBe(3);
   expect(await prisma.ledgerEntry.count()).toBe(6);
 
@@ -84,6 +102,8 @@ async function expectSeededState() {
   expect(await balanceByPhone('01800000002')).toBe(1_000_000n); // Rahim ৳10,000
   expect(await balanceByPhone('01800000003')).toBe(500_000n); // Karim ৳5,000
   expect(await balanceByPhone('01800000005')).toBe(0n); // the store
+  expect(await balanceByPhone('01800000006')).toBe(0n); // Jamal
+  expect(await balanceByPhone('01800000007')).toBe(0n); // Nusrat
   expect(await systemBalance('SYSTEM_FLOAT')).toBe(-10_000_000n);
   expect(await systemBalance('SYSTEM_FEES')).toBe(0n);
 
@@ -91,11 +111,14 @@ async function expectSeededState() {
 }
 
 describe('seedAll', () => {
-  beforeEach(resetDb);
+  beforeEach(async () => {
+    await resetDb();
+    storage = new MemoryStorage();
+  });
   afterAll(() => prisma.$disconnect());
 
-  it('creates system wallets, the design rules, 5 demo accounts and their ledger money', async () => {
-    await seedAll();
+  it('creates system wallets, the design rules, 7 demo accounts and their ledger money', async () => {
+    await seedAll(storage);
 
     await expectSeededState();
     const users = await prisma.user.findMany({ orderBy: { phone: 'asc' } });
@@ -105,12 +128,21 @@ describe('seedAll', () => {
       ['01800000003', '9000000003', 'Karim Hasan', 'CUSTOMER', null],
       ['01800000004', '9000000004', 'Demo Agent', 'AGENT', null],
       ['01800000005', '9000000005', 'Demo Store', 'MERCHANT', 'Demo Store'],
+      ['01800000006', '9000000006', 'Jamal Uddin', 'AGENT', null],
+      ['01800000007', '9000000007', 'Nusrat Jahan', 'CUSTOMER', null],
+    ]);
+    expect(users.map((u) => u.status)).toEqual([
+      'ACTIVE',
+      'ACTIVE',
+      'ACTIVE',
+      'ACTIVE',
+      'ACTIVE',
+      'PENDING_KYC',
+      'REJECTED',
     ]);
     for (const u of users) {
-      expect(u.status).toBe('ACTIVE');
       expect(u.dateOfBirth.toISOString().slice(0, 10)).toBe('1995-01-01');
     }
-    expect(await prisma.kycSubmission.count()).toBe(0);
     const admin = users[0]!;
     expect(await prisma.wallet.count({ where: { userId: admin.id } })).toBe(0);
 
@@ -123,17 +155,116 @@ describe('seedAll', () => {
   });
 
   it('is safe to run twice: replays the money instead of paying it again', async () => {
-    await seedAll();
+    await seedAll(storage);
     const before = await prisma.transaction.findMany({ orderBy: { id: 'asc' } });
 
-    await seedAll();
+    await seedAll(storage);
 
     await expectSeededState();
     expect(await prisma.transaction.findMany({ orderBy: { id: 'asc' } })).toEqual(before);
   });
 
+  it('gives every non-admin demo user 3 private documents and one latest submission', async () => {
+    await seedAll(storage);
+    const admin = await prisma.user.findUniqueOrThrow({ where: { phone: '01800000001' } });
+
+    for (const phone of NON_ADMIN_PHONES) {
+      const user = await prisma.user.findUniqueOrThrow({
+        where: { phone },
+        include: {
+          documents: true,
+          kycSubmissions: { include: { nidFront: true, nidBack: true, selfie: true } },
+        },
+      });
+      expect(user.documents.map((d) => d.kind).sort(), phone).toEqual([
+        'NID_BACK',
+        'NID_FRONT',
+        'SELFIE',
+      ]);
+      expect(user.kycSubmissions, phone).toHaveLength(1);
+      const sub = user.kycSubmissions[0]!;
+      for (const doc of [sub.nidFront, sub.nidBack, sub.selfie]) {
+        expect(doc.userId).toBe(user.id);
+        expect(doc.access).toBe('PRIVATE');
+        expect(doc.mime).toBe('image/webp');
+        expect(doc.storageKey).toMatch(KYC_KEY);
+        expect(doc.storageKey.startsWith(`kyc/${user.id}/`)).toBe(true);
+        const object = storage.objects.get(doc.storageKey)!;
+        expect(object.access).toBe('PRIVATE');
+        expect(isWebp(object.body)).toBe(true);
+        expect(object.body.length).toBe(doc.sizeBytes);
+      }
+      // No profile photo is made: the seed never touches profilePhotoKey.
+      expect(user.profilePhotoKey).toBeNull();
+
+      if (phone === '01800000006') {
+        expect(user.status).toBe('PENDING_KYC');
+        expect(sub).toMatchObject({
+          status: 'PENDING',
+          reviewedById: null,
+          reviewedAt: null,
+          reason: null,
+        });
+      } else if (phone === '01800000007') {
+        expect(user.status).toBe('REJECTED');
+        expect(sub).toMatchObject({
+          status: 'REJECTED',
+          reviewedById: admin.id,
+          reason: 'The NID photo is blurry. Please retake it in good light.',
+        });
+        expect(sub.reviewedAt).toBeInstanceOf(Date);
+      } else {
+        expect(user.status).toBe('ACTIVE');
+        expect(sub).toMatchObject({ status: 'APPROVED', reviewedById: admin.id, reason: null });
+        expect(sub.reviewedAt).toBeInstanceOf(Date);
+      }
+    }
+    expect(await prisma.userDocument.count({ where: { userId: admin.id } })).toBe(0);
+    expect(await prisma.kycSubmission.count({ where: { userId: admin.id } })).toBe(0);
+  });
+
+  it('re-running adds no documents or submissions and keeps an uploaded profile photo', async () => {
+    await seedAll(storage);
+    await prisma.user.update({
+      where: { phone: '01800000002' },
+      data: { profilePhotoKey: 'profile/uploaded-by-rahim.webp' },
+    });
+    const docs = await prisma.userDocument.findMany({ orderBy: { id: 'asc' } });
+    const subs = await prisma.kycSubmission.findMany({ orderBy: { id: 'asc' } });
+    const keys = [...storage.objects.keys()].sort();
+
+    await seedAll(storage);
+
+    await expectSeededState();
+    expect(await prisma.userDocument.findMany({ orderBy: { id: 'asc' } })).toEqual(docs);
+    expect(await prisma.kycSubmission.findMany({ orderBy: { id: 'asc' } })).toEqual(subs);
+    expect([...storage.objects.keys()].sort()).toEqual(keys);
+    const rahim = await prisma.user.findUniqueOrThrow({ where: { phone: '01800000002' } });
+    expect(rahim.profilePhotoKey).toBe('profile/uploaded-by-rahim.webp');
+  });
+
+  it('leaves a user who already has a submission alone (an admin decision survives a re-seed)', async () => {
+    await seedAll(storage);
+    const jamal = await prisma.user.findUniqueOrThrow({ where: { phone: '01800000006' } });
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: jamal.id }, data: { status: 'ACTIVE' } }),
+      prisma.kycSubmission.updateMany({
+        where: { userId: jamal.id },
+        data: { status: 'APPROVED' },
+      }),
+    ]);
+
+    await seedAll(storage);
+
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: jamal.id } })).status).toBe(
+      'ACTIVE',
+    );
+    const subs = await prisma.kycSubmission.findMany({ where: { userId: jamal.id } });
+    expect(subs.map((s) => s.status)).toEqual(['APPROVED']);
+  });
+
   it('lets every demo user log in with the demo PIN; the admin has no wallet', async () => {
-    await seedAll();
+    await seedAll(storage);
     const app = createApp({ storage: new MemoryStorage() });
 
     for (const phone of DEMO_PHONES) {
@@ -152,14 +283,15 @@ describe('seedAll', () => {
     // The Prisma client was built from the test URL already; only the check reads the stub.
     vi.stubEnv('DATABASE_URL', 'postgresql://pocketpay:s3cret-pw@db.example.com:5432/pocketpay');
     try {
-      await expect(seedAll()).rejects.toThrow(/db\.example\.com/);
-      await expect(seedDemo()).rejects.toThrow(/db\.example\.com/);
+      await expect(seedAll(storage)).rejects.toThrow(/db\.example\.com/);
+      await expect(seedDemo(storage)).rejects.toThrow(/db\.example\.com/);
     } finally {
       vi.unstubAllEnvs();
     }
 
     expect(await prisma.wallet.count()).toBe(0);
     expect(await prisma.user.count()).toBe(0);
+    expect(storage.objects.size).toBe(0);
   });
 
   it('refuses a demo phone that already belongs to another role, before any money moves', async () => {
@@ -174,7 +306,7 @@ describe('seedAll', () => {
       },
     });
 
-    await expect(seedAll()).rejects.toThrow(
+    await expect(seedAll(storage)).rejects.toThrow(
       'Phone 01800000004 already belongs to a CUSTOMER, not the demo AGENT',
     );
     expect(await prisma.transaction.count()).toBe(0);

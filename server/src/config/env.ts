@@ -15,6 +15,8 @@ const envSchema = z
       .string()
       .startsWith('cloudinary://', 'must start with cloudinary://')
       .optional(),
+    // Signs LocalStorage's private file links (KYC images). Cloudinary signs its own.
+    FILE_URL_SECRET: z.string().min(32, 'must be at least 32 characters').optional(),
   })
   .superRefine((e, ctx) => {
     if (e.STORAGE_DRIVER === 'cloudinary' && !e.CLOUDINARY_URL) {
@@ -22,6 +24,13 @@ const envSchema = z
         code: 'custom',
         path: ['CLOUDINARY_URL'],
         message: 'is required when STORAGE_DRIVER=cloudinary',
+      });
+    }
+    if (e.STORAGE_DRIVER === 'local' && !e.FILE_URL_SECRET) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['FILE_URL_SECRET'],
+        message: 'is required when STORAGE_DRIVER=local',
       });
     }
   });

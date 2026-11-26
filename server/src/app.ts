@@ -8,8 +8,9 @@ import { httpLogger } from './lib/httpLogger';
 import { logger } from './lib/logger';
 import { ConsoleOtpProvider, type OtpProvider } from './lib/otp';
 import { createStorage, type StorageProvider } from './lib/storage';
-import { LOCAL_UPLOADS_DIR } from './lib/storage/local';
+import { LOCAL_UPLOADS_DIR, LocalStorage } from './lib/storage/local';
 import { createAuthRouter } from './modules/auth/auth.routes';
+import { createFilesRouter } from './modules/files/files.routes';
 import { healthRouter } from './modules/health/health.routes';
 import { createMeRouter } from './modules/me/me.routes';
 import { transactionsRouter } from './modules/transactions/transactions.routes';
@@ -47,6 +48,10 @@ export function createApp(deps: AppDeps = {}): Express {
   app.use('/api/v1/me', createMeRouter({ storage: authDeps.storage }));
   app.use('/api/v1/transactions', transactionsRouter);
   app.use('/api/v1/wallets', walletsRouter);
+  // KYC images behind signed links; Cloudinary serves its own.
+  if (authDeps.storage instanceof LocalStorage) {
+    app.use('/api/v1/files', createFilesRouter(authDeps.storage));
+  }
 
   app.use(notFound);
   app.use(errorHandler);

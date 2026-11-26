@@ -5,6 +5,7 @@ import { parseEnv } from '../src/config/env';
 const base = {
   DATABASE_URL: 'postgresql://a:b@localhost:5433/c',
   JWT_SECRET: 'x'.repeat(32),
+  FILE_URL_SECRET: 'y'.repeat(32),
 };
 
 describe('parseEnv', () => {
@@ -42,5 +43,21 @@ describe('parseEnv', () => {
 
   it('rejects a JWT_SECRET shorter than 32 characters', () => {
     expect(() => parseEnv({ ...base, JWT_SECRET: 'x'.repeat(31) })).toThrow(/JWT_SECRET/);
+  });
+
+  it('requires a FILE_URL_SECRET of at least 32 characters when STORAGE_DRIVER=local', () => {
+    expect(() => parseEnv({ ...base, FILE_URL_SECRET: undefined })).toThrow(/FILE_URL_SECRET/);
+    expect(() => parseEnv({ ...base, FILE_URL_SECRET: 'y'.repeat(31) })).toThrow(/FILE_URL_SECRET/);
+    expect(parseEnv(base).FILE_URL_SECRET).toBe('y'.repeat(32));
+  });
+
+  it('does not need FILE_URL_SECRET with Cloudinary', () => {
+    const e = parseEnv({
+      ...base,
+      FILE_URL_SECRET: undefined,
+      STORAGE_DRIVER: 'cloudinary',
+      CLOUDINARY_URL: 'cloudinary://k:s@c',
+    });
+    expect(e.FILE_URL_SECRET).toBeUndefined();
   });
 });

@@ -11,15 +11,20 @@ if (process.env.NODE_ENV === 'production') {
 // Imported after the check, so a production run stops before it ever connects to the database.
 const { DEMO_PIN, seedAll } = await import('../src/db/seed');
 const { prisma } = await import('../src/lib/prisma');
+const { env } = await import('../src/config/env');
+const { createStorage } = await import('../src/lib/storage');
 
 try {
-  const { users, fees, float, report } = await seedAll();
+  // The demo KYC images go where the server reads them: uploads/private (local) or Cloudinary.
+  const { users, fees, float, report } = await seedAll(createStorage(env));
   console.log(`Seeded. Ledger: ${report.checkedTransactions} transactions, balanced.`);
   console.log(`Demo accounts (PIN ${DEMO_PIN} for all):`);
   for (const u of Object.values(users)) {
     const wallet = await prisma.wallet.findUnique({ where: { userId: u.id } });
     const balance = wallet ? formatTaka(wallet.balance) : 'no wallet';
-    console.log(`  ${u.phone}  ${u.role.padEnd(8)}  ${u.name.padEnd(12)}  ${balance}`);
+    console.log(
+      `  ${u.phone}  ${u.role.padEnd(8)}  ${u.name.padEnd(12)}  ${u.status.padEnd(11)}  ${balance}`,
+    );
   }
   // Re-read: seedSystem returned the wallets before the demo money moved.
   const [f, fl] = await Promise.all(

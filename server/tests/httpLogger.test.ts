@@ -19,6 +19,9 @@ function loggedApp() {
   app.get('/api/v1/wallets/lookup', (_req, res) => {
     res.json({ ok: true });
   });
+  app.get('/api/v1/files/private/*key', (_req, res) => {
+    res.json({ ok: true });
+  });
   return { app, lines };
 }
 
@@ -41,5 +44,20 @@ describe('httpLogger', () => {
     // The existing header redaction still holds.
     expect(req.headers.authorization).toBe('[REDACTED]');
     expect(output).not.toContain('secret-token');
+  });
+
+  it('logs a signed file link without its exp or sig', async () => {
+    const { app, lines } = loggedApp();
+    const path =
+      '/api/v1/files/private/kyc/00000000-0000-4000-8000-000000000000/selfie-00000000-0000-4000-8000-000000000001.webp';
+
+    await request(app).get(`${path}?exp=1900000000&sig=c2lnbmF0dXJlLXRoYXQtbXVzdC1ub3QtbGVhaw`);
+    await vi.waitFor(() => expect(lines).toHaveLength(1));
+
+    const output = lines.join('');
+    expect(output).not.toContain('sig=');
+    expect(output).not.toContain('c2lnbmF0dXJlLXRoYXQtbXVzdC1ub3QtbGVhaw');
+    expect(output).not.toContain('1900000000');
+    expect(JSON.parse(lines[0]!).req.url).toBe(path);
   });
 });
