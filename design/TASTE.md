@@ -144,6 +144,40 @@
 Loading skeleton (`bg-surface-sunken animate-pulse`), empty state, error toast, and disabled money
 actions while KYC is pending.
 
+## Admin panel
+
+The admin is a work tool for reading and deciding, not a wallet. Same tokens, the same two fonts,
+the same `Button`, inputs, chips, cards and toast. Only the layout is wider.
+
+- **From `lg` (1024px) up:** a 240px (`w-60`) white `surface` sidebar with a `border` right edge:
+  PocketPay at the top, then KYC review (with the pending count), Users, Audit log; the language
+  pill, the admin's name and Log out at the bottom. The active item is `bg-primary-50
+  text-primary-dark font-semibold` with `aria-current="page"`; the others `text-text`, with
+  `hover:bg-surface-sunken`. Every item `min-h-11 rounded-xl`. The content sits on `canvas`, up to
+  1200px wide (`max-w-admin`), with the page title (`font-display text-xl font-semibold`) on top.
+- **Below `lg`:** the usual `primary-dark` app bar (`h-16`) with the page title and a menu button,
+  which opens the same list in a sheet from the left (`shadow-lg`, it floats). The sheet traps
+  focus, Esc and the backdrop close it, and focus goes back to the menu button.
+- **The pending badge:** `rounded-full bg-primary-dark text-white text-xs`, the count only; it is
+  hidden at 0. The item's accessible name says "KYC review, 2 pending", not just "2".
+- **Tables (from `lg`):** `text-sm` rows with `border` lines between them, a sticky header row
+  (`text-xs text-text-muted font-medium`, on `surface`), cells `px-4 py-3`, money right-aligned in
+  `font-display tabular-nums`, phones and NIDs in `tabular-nums`. One white card (`rounded-3xl
+  border`) holds the table. **Below `lg`** the same rows become a list of cards: the first column is
+  the card's title, the rest are label: value lines. One component does both (`DataTable`).
+- **Status badges** by meaning, always with the text label, never colour alone: `rounded-full
+  border px-3 text-xs font-semibold`, pending `border-warning text-warning-dark`, active or
+  approved `border-success text-success-dark`, frozen or rejected `border-danger text-danger`,
+  anything else `border-border-strong text-text-muted`.
+- **Decisions** (approve, reject, freeze, unfreeze) always go through `ConfirmDialog`, which names
+  the person ("Approve Jamal Uddin?"). The dialog is a white `rounded-3xl` card with `shadow-lg`
+  over a dimmed backdrop (`bg-text/50`); it traps focus, Esc closes it and focus returns to the
+  button that opened it. Its confirm button is a normal primary button; a reason, when needed, is a
+  textarea with a live `n/200` counter.
+- **The KYC review** shows the full NID in `font-amount` digits (easy to compare with the photo),
+  and the three images side by side from `lg`, stacked below; each opens full size in a dialog.
+- **No stitch** anywhere in the admin panel: it stays in its four places.
+
 ## Banned by default
 
 - Gradients, everywhere (the Home block is flat `primary-dark`).

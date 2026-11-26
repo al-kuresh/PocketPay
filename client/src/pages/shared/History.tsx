@@ -6,6 +6,7 @@ import { history } from '../../api/transactions'
 import type { HistoryItem, Role } from '../../api/types'
 import { AppShell } from '../../components/layout/AppShell'
 import { Button } from '../../components/ui/Button'
+import { ChipGroup } from '../../components/ui/ChipGroup'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Input } from '../../components/ui/Input'
 import { HistoryRow, HistorySkeleton } from '../../features/wallet/RecentTransactions'
@@ -20,10 +21,6 @@ const TYPES: Record<Role, ReadonlyArray<HistoryItem['type']>> = {
   MERCHANT: ['PAYMENT'],
   ADMIN: [],
 }
-
-const CHIP =
-  // relative: the sr-only radio is absolute; inside a chip it scrolls (and clips) with it instead of widening the page.
-  'relative flex min-h-11 shrink-0 cursor-pointer items-center rounded-full border border-border-strong bg-surface px-4 text-sm text-text transition duration-150 ease-out-quint active:scale-95 has-checked:border-primary-dark has-checked:bg-primary-50 has-checked:font-semibold has-checked:text-primary-darker has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-primary-dark'
 
 /** Every transaction, newest first, a page at a time (`nextCursor`). Filters: type, and a date range in Dhaka days. */
 export function History() {
@@ -45,26 +42,13 @@ export function History() {
   return (
     <AppShell title={t('nav.history')} nav canvas>
       <div className="flex flex-col gap-3">
-        {/* Chips: one radio per type (the same pattern as registration's account type), scrolling sideways if they don't fit. */}
-        {/* min-w-0: a fieldset is min-content wide by default, so the chips would widen the whole page (and push the fixed nav off a phone screen). */}
-        <fieldset className="flex min-w-0 flex-col gap-2">
-          <legend className="mb-2 text-sm text-text">{t('history.type')}</legend>
-          <div className="-mx-6 flex gap-2 overflow-x-auto px-6">
-            {['', ...(role ? TYPES[role] : [])].map((type) => (
-              <label key={type} className={CHIP}>
-                <input
-                  type="radio"
-                  name="type"
-                  value={type}
-                  checked={filters.type === type}
-                  onChange={() => set({ type })}
-                  className="sr-only"
-                />
-                {type ? t(`flows.${type}.title`) : t('history.all')}
-              </label>
-            ))}
-          </div>
-        </fieldset>
+        <ChipGroup
+          legend={t('history.type')}
+          name="type"
+          value={filters.type}
+          options={['', ...(role ? TYPES[role] : [])].map((type) => ({ value: type, label: type ? t(`flows.${type}.title`) : t('history.all') }))}
+          onChange={(type) => set({ type })}
+        />
         <div className="grid grid-cols-2 gap-3">
           <Input label={t('history.from')} type="date" value={filters.from} max={filters.to || today} onChange={(e) => set({ from: e.target.value })} />
           <Input label={t('history.to')} type="date" value={filters.to} min={filters.from || undefined} max={today} onChange={(e) => set({ to: e.target.value })} />

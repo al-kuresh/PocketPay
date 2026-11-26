@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { useSession } from '../stores/session'
 import { testUser } from '../test/server'
 import type { PublicUser } from '../api/types'
+import en from '../i18n/en.json'
 
 const visit = (path: string) => renderRoutes(path).router
 
@@ -69,6 +70,34 @@ describe('route guards', () => {
     signIn({ role: 'CUSTOMER', status: 'ACTIVE' })
     const router = visit('/register')
     expect(await screen.findByRole('heading', { name: 'Home' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/')
+  })
+
+  it('an ADMIN at / → the KYC queue at /admin/kyc', async () => {
+    signIn({ role: 'ADMIN' })
+    const router = visit('/')
+    expect(await screen.findByRole('heading', { level: 1, name: en.admin.nav.kyc })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/admin/kyc')
+  })
+
+  it('an ADMIN at a customer page → /admin/kyc', async () => {
+    signIn({ role: 'ADMIN' })
+    const router = visit('/send-money')
+    expect(await screen.findByRole('heading', { level: 1, name: en.admin.nav.kyc })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/admin/kyc')
+  })
+
+  it('a CUSTOMER at /admin/users → the customer home', async () => {
+    signIn({ role: 'CUSTOMER', status: 'ACTIVE' })
+    const router = visit('/admin/users')
+    expect(await screen.findByRole('heading', { name: 'Home' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/')
+  })
+
+  it('an AGENT at /admin/kyc/<id> → the agent home', async () => {
+    signIn({ role: 'AGENT', status: 'ACTIVE' })
+    const router = visit('/admin/kyc/0b6c2f9e-7a3d-4c1b-9e8f-1a2b3c4d5e6f')
+    expect(await screen.findByRole('button', { name: 'Cash In' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/')
   })
 

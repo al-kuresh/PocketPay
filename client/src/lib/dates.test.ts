@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDateTime, formatWhen, greetingKey } from './dates'
+import { formatDate, formatDateTime, formatWhen, greetingKey, yearsOld } from './dates'
 
 describe('formatDateTime (always Asia/Dhaka)', () => {
   it('en', () => {
@@ -53,5 +53,19 @@ describe('formatWhen: list rows, by the Dhaka day (UTC+6), whatever the phone sa
     ['2025-11-20T12:00:00Z', '২০ নভে, ২০২৫'],
   ])('bn: %s → %s (Bangla words and digits)', (iso, text) => {
     expect(formatWhen(iso, 'bn', new Date('2026-11-25T15:00:00Z'))).toBe(text) // 21:00 on the 25th in Dhaka
+  })
+})
+
+describe('date of birth (a UTC calendar date, as the server stores it)', () => {
+  it('formatDate shows the calendar day, never shifted by a time zone', () => {
+    expect(formatDate('1990-01-15', 'en')).toBe('15 Jan 1990')
+    expect(formatDate('1990-01-15', 'bn')).toMatch(/^১৫/)
+  })
+
+  it('yearsOld counts whole years up to `today`, birthday included', () => {
+    expect(yearsOld('1990-01-15', '2026-01-14')).toBe(35)
+    expect(yearsOld('1990-01-15', '2026-01-15')).toBe(36)
+    expect(yearsOld('2008-02-29', '2026-02-28')).toBe(17)
+    expect(yearsOld('2008-02-29', '2026-03-01')).toBe(18)
   })
 })

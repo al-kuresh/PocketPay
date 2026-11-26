@@ -46,6 +46,7 @@
 
   /* Layout */
   --container-phone: 420px; /* phone-width app frame */
+  --container-admin: 1200px; /* the admin panel's content column (TASTE.md, Admin panel) */
 
   /* Motion. Use with duration-150 (hover, press) or duration-200 (reveals). */
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);

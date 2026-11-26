@@ -70,3 +70,20 @@ export function greetingKey(now: Date): 'morning' | 'afternoon' | 'evening' {
   const hour = Number(dhakaHour.format(now))
   return hour >= 5 && hour < 12 ? 'morning' : hour >= 12 && hour < 17 ? 'afternoon' : 'evening'
 }
+
+// A date of birth is a calendar date stored as UTC midnight (server and memory: never local time).
+const calendarDate = {
+  en: new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }),
+  bn: new Intl.DateTimeFormat('bn-BD', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }),
+}
+
+/** "1990-01-15" → "15 Jan 1990" (en) or "১৫ জানু, ১৯৯০" (bn). */
+export function formatDate(isoDate: string, lang: Lang): string {
+  return calendarDate[lang].format(new Date(isoDate))
+}
+
+/** Whole years from `dob` to `today` (both YYYY-MM-DD; pass dhakaToday()). String compare of MM-DD: no time zones. */
+export function yearsOld(dob: string, today: string): number {
+  const years = Number(today.slice(0, 4)) - Number(dob.slice(0, 4))
+  return today.slice(5) < dob.slice(5) ? years - 1 : years
+}

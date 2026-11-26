@@ -118,7 +118,7 @@ describe('Login', () => {
     expect(loginBodies.map((b) => b.phone)).toEqual(['01800000002', '01800000005', '01800000001'])
   })
 
-  it('an admin login → the Phase 7 page, whose Log out goes back to /login', async () => {
+  it('an admin login → the KYC queue, whose Log out goes back to /login', async () => {
     loginAnswers(testUser({ role: 'ADMIN', phone: '01800000001' }))
     let logouts = 0
     server.use(
@@ -129,7 +129,10 @@ describe('Login', () => {
     )
     const { router, user } = visit()
     await user.click(screen.getByRole('button', { name: en.login.demo.ADMIN }))
-    expect(await screen.findByText(en.admin.comingSoon)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: en.admin.nav.kyc })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/admin/kyc')
+    // Below lg (jsdom has no matchMedia) Log out is in the menu sheet.
+    await user.click(screen.getByRole('button', { name: en.admin.nav.menu }))
     await user.click(screen.getByRole('button', { name: en.common.logout }))
     expect(await screen.findByRole('heading', { name: en.login.title })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/login')

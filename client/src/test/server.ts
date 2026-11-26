@@ -15,6 +15,8 @@ export const server = setupServer(
   http.get('/api/v1/transactions', () => HttpResponse.json({ success: true, data: { items: [], nextCursor: null } })),
   // A REJECTED user's home banner asks for the reason.
   http.get('/api/v1/kyc', () => HttpResponse.json({ success: true, data: null })),
+  // An admin's home is the KYC queue (it and the sidebar's pending badge read this).
+  http.get('/api/v1/admin/kyc', () => HttpResponse.json({ success: true, data: { items: [], nextCursor: null, pendingCount: 0 } })),
 )
 
 /** The API's error envelope, for MSW handlers. */
