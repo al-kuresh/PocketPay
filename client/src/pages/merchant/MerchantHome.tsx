@@ -18,7 +18,7 @@ export function MerchantHome() {
       {user?.status === 'REJECTED' && <StatusBanner kind="REJECTED" />}
       <Card className="flex flex-col gap-1">
         <p className="text-sm text-text-muted">{t('merchant.yourNumber')}</p>
-        <p className="text-lg font-semibold tabular-nums text-text">{user?.phone}</p>
+        <p className="font-display text-xl font-semibold tabular-nums text-text">{user?.phone}</p>
         <p className="text-sm text-text-muted">{t('merchant.yourNumberHint')}</p>
       </Card>
       <RecentTransactions />

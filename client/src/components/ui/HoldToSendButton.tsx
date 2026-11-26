@@ -1,10 +1,11 @@
 import { LoaderCircle } from 'lucide-react'
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Stitch } from './Stitch'
 
-// Keep in step with --duration-hold in index.css (the fill's sweep).
-const HOLD_MS = 1200
+// The one hold time: the timer below, and the fill's sweep through the inline --hold-ms (hold-fill in index.css).
+export const HOLD_MS = 1200
+const HOLD_STYLE = { '--hold-ms': `${HOLD_MS}ms` } as CSSProperties
 
 interface HoldToSendButtonProps {
   /** Already translated, e.g. "Hold to send ৳505.00". Also the accessible name. */
@@ -81,7 +82,8 @@ export function HoldToSendButton({ label, disabled = false, loading = false, onH
         }}
         onBlur={stop}
         onContextMenu={(e) => e.preventDefault()} // a long press would open the phone's menu
-        className={`relative flex h-14 w-full touch-none select-none items-center justify-center overflow-hidden rounded-2xl text-base font-semibold disabled:cursor-not-allowed ${disabled && !loading ? 'bg-surface-sunken text-text-muted' : 'bg-primary-50 text-primary-darker'}`}
+        style={HOLD_STYLE}
+        className={`relative flex h-14 w-full callout-none touch-none select-none items-center justify-center overflow-hidden rounded-2xl text-base font-semibold disabled:cursor-not-allowed ${disabled && !loading ? 'bg-surface-sunken text-text-muted' : 'bg-primary-50 text-primary-darker'}`}
       >
         <Stitch
           shape="rect"

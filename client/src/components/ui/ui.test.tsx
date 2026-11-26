@@ -11,6 +11,7 @@ import { BottomNav } from '../layout/BottomNav'
 import { Button } from './Button'
 import { Card } from './Card'
 import { EmptyState } from './EmptyState'
+import { HOLD_MS, HoldToSendButton } from './HoldToSendButton'
 import { ImagePicker } from './ImagePicker'
 import { Input } from './Input'
 import { LanguageToggle } from './LanguageToggle'
@@ -317,15 +318,51 @@ describe('Toast', () => {
   })
 })
 
+describe('PinInput: the canvas look', () => {
+  it('the lock icon beside the label only when asked (Confirm), never on Login or Change PIN', () => {
+    const { rerender } = render(<PinInput label="Your PIN" lock />)
+    expect(screen.getByText('Your PIN').closest('label')?.querySelector('svg')).not.toBeNull()
+    rerender(<PinInput label="Your PIN" />)
+    expect(screen.getByText('Your PIN').closest('label')?.querySelector('svg')).toBeNull()
+  })
+
+  it('five boxes across the full width, centred', () => {
+    render(<PinInput label="PIN" />)
+    const row = screen.getByLabelText('PIN').parentElement!
+    expect(row).toHaveClass('grid', 'grid-cols-5', 'w-full')
+    expect(row.querySelectorAll('[data-filled]')).toHaveLength(5)
+  })
+})
+
+describe('HoldToSendButton on a phone', () => {
+  it('a long press never opens the phone menu, the iOS callout or a text selection', () => {
+    render(<HoldToSendButton label="Hold to send ৳5.00" onHold={() => {}} />)
+    const button = screen.getByRole('button', { name: 'Hold to send ৳5.00' })
+    expect(fireEvent.contextMenu(button)).toBe(false) // false: the default (the menu) was prevented
+    expect(button).toHaveClass('callout-none', 'select-none')
+  })
+
+  it('one hold time: the fill reads its duration from HOLD_MS (an inline CSS variable), not a second constant', () => {
+    expect(HOLD_MS).toBe(1200)
+    render(<HoldToSendButton label="Hold" onHold={() => {}} />)
+    expect(screen.getByRole('button', { name: 'Hold' }).style.getPropertyValue('--hold-ms')).toBe('1200ms')
+  })
+})
+
 describe('LanguageToggle', () => {
-  it('switches the language and shows which one is on', () => {
+  it('one pill, named in the other language: a tap switches, and it then offers the first language back', () => {
     render(<LanguageToggle />)
-    const bnButton = screen.getByRole('button', { name: 'বাংলা' })
-    expect(bnButton).toHaveAttribute('aria-pressed', 'false')
-    fireEvent.click(bnButton)
+    expect(screen.getAllByRole('button')).toHaveLength(1)
+    const pill = screen.getByRole('button', { name: 'বাংলা' })
+    expect(pill).toHaveAttribute('lang', 'bn')
+    fireEvent.click(pill)
     expect(useLanguage.getState().lang).toBe('bn')
-    expect(bnButton).toHaveAttribute('aria-pressed', 'true')
     expect(document.documentElement.lang).toBe('bn')
+    expect(pill).toHaveAccessibleName('English')
+    expect(pill).toHaveAttribute('lang', 'en')
+    fireEvent.click(pill)
+    expect(useLanguage.getState().lang).toBe('en')
+    expect(pill).toHaveAccessibleName('বাংলা')
   })
 })
 

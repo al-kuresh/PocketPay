@@ -8,6 +8,9 @@ import { useSession } from '../../stores/session'
 import { renderPage, renderRoutes } from '../../test/render'
 import { apiError, server, testUser } from '../../test/server'
 
+/** A whole line of text, even when part of it (the name) is its own element. */
+const line = (text: string) => (_: string, el: Element | null) => el?.tagName === 'P' && el.textContent === text
+
 type User = ReturnType<typeof renderRoutes>['user']
 type FlowPath = 'send-money' | 'cash-out' | 'payment'
 
@@ -110,14 +113,23 @@ async function atConfirm() {
 }
 
 const HOLD_MS = 1200
-const holdToSend = (total = '৳505.00') => en.transfer.holdToSend.replace('{{amount}}', total)
+type FlowType = 'SEND_MONEY' | 'CASH_OUT' | 'PAYMENT' | 'CASH_IN'
+/** The hold button's label for a flow ("Hold to cash out ৳505.00"), in English unless `dict` is bn. */
+const holdLabel = (type: FlowType, total = '৳505.00', dict: typeof en = en) => dict.flows[type].hold.replace('{{amount}}', total)
+const holdToSend = (total = '৳505.00') => holdLabel('SEND_MONEY', total)
 
-// Only setTimeout is faked, and it still runs with the clock, so lookups, MSW and findBy* work as usual.
 afterEach(() => {
   vi.useRealTimers()
 })
-const fakeTimers = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true })
+// Only setTimeout is faked, and the clock moves only when a test moves it (no real time leaks in), so the
+// boundaries are exact: 1 ms short of HOLD_MS does not send, HOLD_MS does, however slow the machine is.
+const fakeTimers = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 const wait = (ms: number) => act(() => vi.advanceTimersByTime(ms))
+/** Back to the real clock, first running what is already due (e.g. React Query's 0 ms notifications). */
+const realTimers = () => {
+  wait(0)
+  vi.useRealTimers()
+}
 
 /** Press the hold-to-send button with the pointer, keep it down for `ms`, let go. */
 async function hold(user: User, name: string, ms = HOLD_MS) {
@@ -126,7 +138,7 @@ async function hold(user: User, name: string, ms = HOLD_MS) {
   await user.pointer({ keys: '[MouseLeft>]', target: button })
   wait(ms)
   await user.pointer({ keys: '[/MouseLeft]', target: button })
-  vi.useRealTimers()
+  realTimers()
 }
 
 async function submitPin(user: User, button = holdToSend()) {
@@ -143,13 +155,13 @@ describe('TransferFlow: Send Money', () => {
     expect(lookups).toEqual(['01800000003']) // debounced: one lookup for the whole number, not one per digit
     expect(previews).toEqual([{ type: 'SEND_MONEY', receiverPhone: '01800000003', amount: '50000' }])
 
-    // Confirm: receiver, amount, fee, and the total
+    // Confirm (it opens in a transition, a moment after the preview lands): receiver, amount, fee, and the total
+    await atConfirm()
     expect(await screen.findByText('Karim H***')).toBeInTheDocument()
     expect(screen.getByText('৳500.00')).toBeInTheDocument()
     expect(screen.getByText('৳5.00')).toBeInTheDocument()
     expect(screen.getByText('৳505.00')).toBeInTheDocument()
 
-    await atConfirm()
     await submitPin(user)
 
     expect(await screen.findByText('PP7K2M9QXA')).toBeInTheDocument()
@@ -418,7 +430,7 @@ describe('TransferFlow drives Cash Out and Payment too', () => {
     await user.clear(receiverField(label))
     await enterDetails(user, { phone: '01800000004', label })
     await atConfirm()
-    await submitPin(user)
+    await submitPin(user, holdLabel('CASH_OUT'))
 
     expect(await screen.findByText('PP7K2M9QXA')).toBeInTheDocument()
     expect(previews).toEqual([{ type: 'CASH_OUT', receiverPhone: '01800000004', amount: '50000' }])
@@ -434,11 +446,88 @@ describe('TransferFlow drives Cash Out and Payment too', () => {
     await user.clear(receiverField(label))
     await enterDetails(user, { phone: '01800000005', label })
     await atConfirm()
-    await submitPin(user)
+    await submitPin(user, holdLabel('PAYMENT'))
 
     const receipt = await screen.findByRole('region', { name: en.transfer.success })
     expect(within(receipt).getByText('Demo Store')).toBeInTheDocument()
     expect(posts.map((p) => p.path)).toEqual(['payment'])
+  })
+})
+
+describe('the Sent screen', () => {
+  /** Sent ৳500 (+ ৳5 fee) to Karim: the flow's last step. */
+  async function sent() {
+    const rendered = await renderPage('/send-money')
+    await enterDetails(rendered.user)
+    await atConfirm()
+    await submitPin(rendered.user)
+    return { ...rendered, region: await screen.findByRole('region', { name: en.transfer.success }) }
+  }
+  /** The value next to a receipt-card label. */
+  const value = (region: HTMLElement, label: string) => within(region).getByText(label).nextElementSibling
+
+  it('like the canvas: the stitched ring and the tick, the amount as the hero, to whom; then the card with the tear line and the new balance', async () => {
+    const { region } = await sent()
+    expect(region.querySelector('svg circle[stroke-dasharray="7 9"]')).not.toBeNull() // the stitched ring
+    expect(region.querySelector('svg [data-tick]')).not.toBeNull()
+    expect(within(region).getByText('৳500.00')).toHaveClass('font-amount', 'text-hero') // the amount sent, not the total
+    expect(within(region).getByText(line('to Karim H*** · 01800000003'))).toBeInTheDocument()
+
+    expect(value(region, en.transfer.trxId)).toHaveTextContent('PP7K2M9QXA')
+    expect(value(region, en.transfer.time)).toHaveTextContent('25 Nov 2026, 10:12 am') // 04:12 UTC in Dhaka
+    expect(value(region, en.transfer.fee)).toHaveTextContent('৳5.00')
+    expect(value(region, en.transfer.totalPaid)).toHaveTextContent('−৳505.00')
+    expect(region.querySelector('svg line[stroke-dasharray="7 9"]')).not.toBeNull() // the tear line
+    expect(value(region, en.transfer.balanceAfter)).toHaveTextContent('৳9,495.00') // mine.balanceAfter
+    expect(value(region, en.transfer.balanceAfter)).toHaveClass('font-amount')
+    expect(within(region).getByRole('button', { name: en.transfer.share })).toBeInTheDocument()
+    expect(within(region).getByRole('button', { name: en.transfer.done })).toBeInTheDocument()
+  })
+
+  it('reduced motion: every animation on it (the tick drawing, the amount rising) is switched off', async () => {
+    const { region } = await sent()
+    const animated = [...region.querySelectorAll('[class*="animate-"]')].filter((el) =>
+      /(^|\s)animate-(?!none)/.test(el.getAttribute('class') ?? ''),
+    )
+    expect(animated.length).toBeGreaterThanOrEqual(2)
+    for (const el of animated) expect(el.getAttribute('class')).toContain('motion-reduce:animate-none')
+    expect(within(region).getByText('৳500.00').getAttribute('class')).toContain('animate-rise')
+    expect(region.querySelector('[data-tick]')?.getAttribute('class')).toContain('animate-tick')
+  })
+
+  it('in Bangla: the same screen with Bangla digits', async () => {
+    const { region } = await sent()
+    try {
+      act(() => useLanguage.getState().setLang('bn'))
+      expect(within(region).getByText('৳৫০০.০০')).toHaveClass('font-amount')
+      expect(within(region).getByRole('heading', { name: bn.transfer.success })).toBeInTheDocument()
+      expect(value(region, bn.transfer.balanceAfter)).toHaveTextContent('৳৯,৪৯৫.০০')
+    } finally {
+      act(() => useLanguage.getState().setLang('en'))
+    }
+  })
+})
+
+describe('the hold button names the flow', () => {
+  it.each([
+    ['send-money', 'SEND_MONEY', '01800000003'],
+    ['cash-out', 'CASH_OUT', '01800000004'],
+    ['payment', 'PAYMENT', '01800000005'],
+    ['cash-in', 'CASH_IN', '01800000003'],
+  ] as const)('/%s: "%s" in English and in Bangla', async (path, type, phone) => {
+    if (type === 'CASH_IN') {
+      useSession.getState().signIn({ user: testUser({ role: 'AGENT', name: 'Demo Agent', phone: '01800000004' }), accessToken: 't' })
+    }
+    const { user } = await renderPage(`/${path}`)
+    await enterDetails(user, { phone, label: en.flows[type].receiver })
+    await atConfirm()
+    expect(screen.getByRole('button', { name: holdLabel(type) })).toBeInTheDocument()
+    try {
+      act(() => useLanguage.getState().setLang('bn'))
+      expect(screen.getByRole('button', { name: holdLabel(type, '৳৫০৫.০০', bn) })).toBeInTheDocument()
+    } finally {
+      act(() => useLanguage.getState().setLang('en'))
+    }
   })
 })
 
@@ -582,6 +671,12 @@ describe('the amount screen: keypad, chips, fee from preview', () => {
 })
 
 describe('Confirm: hold to send', () => {
+  /** No POST made and none in flight: while a send is pending the PIN field is locked, and that shows at once, even on a frozen clock. */
+  function expectNothingSent() {
+    expect(posts).toHaveLength(0)
+    expect(pinField()).toBeEnabled()
+  }
+
   /** On Confirm for ৳500 to Karim, with the PIN typed. */
   async function ready() {
     const rendered = await renderPage('/send-money')
@@ -603,6 +698,7 @@ describe('Confirm: hold to send', () => {
     expect(button.querySelector('svg rect[stroke-dasharray="7 9"]')).not.toBeNull() // the stitched button
     expect(button).toHaveAccessibleDescription(en.transfer.holdHint)
     expect(screen.getByRole('heading', { name: en.transfer.checkTitle })).toBeInTheDocument()
+    expect(screen.getByText(en.transfer.pin).closest('label')?.querySelector('svg')).not.toBeNull() // the lock
   })
 
   it('a short press (a tap) does not submit', async () => {
@@ -610,7 +706,7 @@ describe('Confirm: hold to send', () => {
     fakeTimers()
     await user.click(button)
     wait(HOLD_MS * 3)
-    expect(posts).toHaveLength(0)
+    expectNothingSent()
     expect(screen.queryByText('PP7K2M9QXA')).not.toBeInTheDocument()
   })
 
@@ -618,12 +714,12 @@ describe('Confirm: hold to send', () => {
     const { user, button } = await ready()
     fakeTimers()
     await user.pointer({ keys: '[MouseLeft>]', target: button })
-    wait(HOLD_MS - 300)
-    expect(posts).toHaveLength(0)
-    wait(300)
+    wait(HOLD_MS - 1)
+    expectNothingSent()
+    wait(1)
     wait(HOLD_MS * 3) // still holding
     await user.pointer({ keys: '[/MouseLeft]', target: button })
-    vi.useRealTimers()
+    realTimers()
     expect(await screen.findByText('PP7K2M9QXA')).toBeInTheDocument()
     expect(posts).toHaveLength(1)
   })
@@ -633,16 +729,16 @@ describe('Confirm: hold to send', () => {
     fakeTimers()
     await user.pointer({ keys: '[MouseLeft>]', target: button })
     expect(button).toHaveAttribute('data-holding', 'true')
-    wait(HOLD_MS - 300)
+    wait(HOLD_MS - 1)
     await user.pointer({ keys: '[/MouseLeft]', target: button })
     expect(button).toHaveAttribute('data-holding', 'false')
     wait(HOLD_MS * 3)
-    expect(posts).toHaveLength(0)
+    expectNothingSent()
 
     await user.pointer({ keys: '[MouseLeft>]', target: button })
     wait(HOLD_MS)
     await user.pointer({ keys: '[/MouseLeft]', target: button })
-    vi.useRealTimers()
+    realTimers()
     expect(await screen.findByText('PP7K2M9QXA')).toBeInTheDocument()
     expect(posts).toHaveLength(1)
   })
@@ -651,10 +747,10 @@ describe('Confirm: hold to send', () => {
     const { button } = await ready()
     fakeTimers()
     fireEvent.pointerDown(button, { button: 0, pointerId: 1 })
-    wait(HOLD_MS - 300)
+    wait(HOLD_MS - 1)
     fireEvent.pointerCancel(button, { pointerId: 1 })
     wait(HOLD_MS * 3)
-    expect(posts).toHaveLength(0)
+    expectNothingSent()
   })
 
   it.each([
@@ -665,15 +761,15 @@ describe('Confirm: hold to send', () => {
     act(() => button.focus())
     fakeTimers()
     await user.keyboard(down)
-    wait(HOLD_MS - 300)
+    wait(HOLD_MS - 1)
     await user.keyboard(up)
     wait(HOLD_MS * 3)
-    expect(posts).toHaveLength(0)
+    expectNothingSent()
 
     await user.keyboard(down)
     wait(HOLD_MS)
     await user.keyboard(up)
-    vi.useRealTimers()
+    realTimers()
     expect(await screen.findByText('PP7K2M9QXA')).toBeInTheDocument()
     expect(posts).toHaveLength(1)
   })
@@ -683,7 +779,7 @@ describe('Confirm: hold to send', () => {
     fakeTimers()
     await user.type(pinField()!, '{Enter}')
     wait(HOLD_MS * 3)
-    expect(posts).toHaveLength(0)
+    expectNothingSent()
   })
 
   it('vibrates (30 ms) when the hold completes, when the phone can', async () => {
@@ -693,11 +789,12 @@ describe('Confirm: hold to send', () => {
       const { user } = await ready()
       fakeTimers()
       await user.pointer({ keys: '[MouseLeft>]', target: screen.getByRole('button', { name: holdToSend() }) })
-      wait(HOLD_MS - 300)
+      wait(HOLD_MS - 1)
       expect(vibrate).not.toHaveBeenCalled()
-      wait(300)
+      expectNothingSent()
+      wait(1)
       expect(vibrate).toHaveBeenCalledExactlyOnceWith(30)
-      vi.useRealTimers()
+      realTimers()
       expect(await screen.findByText('PP7K2M9QXA')).toBeInTheDocument()
     } finally {
       Reflect.deleteProperty(navigator, 'vibrate')
@@ -714,7 +811,7 @@ describe('Confirm: hold to send', () => {
     fakeTimers()
     fireEvent.pointerDown(button, { button: 0, pointerId: 1 })
     wait(HOLD_MS * 2)
-    expect(posts).toHaveLength(0)
+    expectNothingSent()
   })
 
   it('reduced motion: the fill does not animate (no transition), but the hold time still applies', async () => {
@@ -724,10 +821,10 @@ describe('Confirm: hold to send', () => {
     expect(button.querySelector('[data-fill]')).toHaveClass('hold-fill')
     fakeTimers()
     await user.pointer({ keys: '[MouseLeft>]', target: button })
-    wait(HOLD_MS - 300)
+    wait(HOLD_MS - 1)
     await user.pointer({ keys: '[/MouseLeft]', target: button })
     wait(HOLD_MS)
-    expect(posts).toHaveLength(0)
+    expectNothingSent()
   })
 
   it('NETWORK_ERROR: the note can still be changed on Confirm, and "Try again" is a new hold with the SAME key', async () => {
@@ -743,7 +840,7 @@ describe('Confirm: hold to send', () => {
     await user.click(retry) // a tap is not enough
     wait(HOLD_MS * 2)
     expect(posts).toHaveLength(1)
-    vi.useRealTimers()
+    realTimers()
 
     await hold(user, en.transfer.tryAgain)
     expect(await screen.findByText('PP7K2M9QXA')).toBeInTheDocument()

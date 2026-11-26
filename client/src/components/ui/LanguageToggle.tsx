@@ -1,34 +1,26 @@
 import { useTranslation } from 'react-i18next'
-import { useLanguage, type Lang } from '../../stores/language'
-
-const LANGS: Lang[] = ['en', 'bn']
+import { useLanguage } from '../../stores/language'
 
 const TONES = {
-  // On the orange app bar: the default, that's where it usually lives.
-  brand: { group: 'border-white', on: 'bg-white font-semibold text-primary-dark', off: 'text-white hover:bg-primary-darker' },
-  surface: { group: 'border-border-strong', on: 'bg-primary-dark font-semibold text-white', off: 'text-text hover:bg-surface-sunken' },
+  // On the orange app bar and the Home block: the default, that's where it usually lives.
+  brand: 'border-thread text-white hover:bg-primary-darker',
+  surface: 'border-border-strong text-primary-dark hover:bg-primary-50',
 }
 
-/** English / বাংলা. Each name is shown in its own language. */
+/** One pill, like the canvas: it names the other language in that language ("বাংলা" while in English) and switches to it. */
 export function LanguageToggle({ tone = 'brand' }: { tone?: keyof typeof TONES }) {
-  const c = TONES[tone]
   const { t } = useTranslation()
   const lang = useLanguage((s) => s.lang)
   const setLang = useLanguage((s) => s.setLang)
+  const other = lang === 'en' ? 'bn' : 'en'
   return (
-    <div role="group" aria-label={t('language.label')} className={`inline-flex gap-1 rounded-xl border p-1 ${c.group}`}>
-      {LANGS.map((l) => (
-        <button
-          key={l}
-          type="button"
-          lang={l}
-          aria-pressed={lang === l}
-          onClick={() => setLang(l)}
-          className={`min-h-11 min-w-11 rounded-xl px-3 text-sm transition-colors duration-150 ease-out-quint ${lang === l ? c.on : c.off}`}
-        >
-          {t(`language.${l}`)}
-        </button>
-      ))}
-    </div>
+    <button
+      type="button"
+      lang={other}
+      onClick={() => setLang(other)}
+      className={`min-h-11 min-w-11 rounded-full border px-4 font-display text-base font-semibold transition duration-150 ease-out-quint active:scale-95 ${TONES[tone]}`}
+    >
+      {t(`language.${other}`)}
+    </button>
   )
 }

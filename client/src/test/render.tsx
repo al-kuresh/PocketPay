@@ -2,6 +2,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { render, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter } from 'react-router'
+import { vi } from 'vitest'
 import { RouterProvider } from 'react-router/dom'
 import { createQueryClient } from '../api/queryClient'
 import { ToastProvider } from '../components/ui/Toast'
@@ -18,7 +19,11 @@ export function renderRoutes(path: string) {
       </ToastProvider>
     </QueryClientProvider>,
   )
-  return { router, queryClient, user: userEvent.setup() }
+  // When a test fakes the clock (the hold tests), user-event's own short waits move it too; otherwise they'd never end.
+  const advanceTimers = (ms: number) => {
+    if (vi.isFakeTimers()) vi.advanceTimersByTime(ms)
+  }
+  return { router, queryClient, user: userEvent.setup({ advanceTimers }) }
 }
 
 /** renderRoutes for a lazy (code-split) page: resolves once its chunk has loaded and the Suspense skeleton is gone. */

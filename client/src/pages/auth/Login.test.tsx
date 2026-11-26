@@ -99,6 +99,15 @@ describe('Login', () => {
     expect(loginBodies).toEqual([{ phone: '01800000004', pin: '48213' }])
   })
 
+  it('each demo card: the role as its name (in the display face), its seeded number as its description', async () => {
+    renderRoutes('/login')
+    for (const [role, phone] of [['CUSTOMER', '01800000002'], ['AGENT', '01800000004'], ['MERCHANT', '01800000005'], ['ADMIN', '01800000001']] as const) {
+      const card = await screen.findByRole('button', { name: en.login.demo[role] })
+      expect(card).toHaveAccessibleDescription(phone)
+      expect(screen.getByText(en.login.demo[role])).toHaveClass('font-display')
+    }
+  })
+
   it('the four demo buttons use the seeded phones', async () => {
     loginAnswers([401, apiError('INVALID_CREDENTIALS')])
     const { user } = visit()

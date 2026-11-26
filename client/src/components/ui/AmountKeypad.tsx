@@ -1,5 +1,5 @@
 import { Delete } from 'lucide-react'
-import { useId, type Ref } from 'react'
+import { useId, ViewTransition, type Ref } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toLangDigits } from '../../lib/digits'
 import { editAmount, formatTaka } from '../../lib/money'
@@ -25,23 +25,26 @@ export function AmountField({ label, text, onTextChange, ref }: AmountFieldProps
       <label htmlFor={id} className="text-sm text-text-muted">
         {label}
       </label>
-      <div className="flex items-baseline justify-center gap-2">
-        <span aria-hidden className="font-amount text-xl font-semibold text-text-muted">
-          ৳
-        </span>
-        <input
-          ref={ref}
-          id={id}
-          inputMode="none" // the phone keyboard never opens: the keypad below is the keyboard
-          autoComplete="off"
-          placeholder={toLangDigits('0', lang)}
-          value={toLangDigits(text, lang)}
-          size={text.length || 1} // the width where field-sizing isn't supported yet
-          onChange={(e) => onTextChange(editAmount(text, e.target.value))}
-          // h-16: field-sizing alone makes the box 119px tall (Anek's Bangla ascent); 64px fits the 64px digits and the screen.
-          className="field-sizing-content h-16 min-w-0 rounded-xl bg-transparent text-center font-amount text-hero font-semibold text-text placeholder:text-text-muted"
-        />
-      </div>
+      {/* The shared amount: a transition carries it on to Confirm's total and the Sent screen. */}
+      <ViewTransition name="amount">
+        <div className="flex items-baseline justify-center gap-2">
+          <span aria-hidden className="font-amount text-xl font-semibold text-text-muted">
+            ৳
+          </span>
+          <input
+            ref={ref}
+            id={id}
+            inputMode="none" // the phone keyboard never opens: the keypad below is the keyboard
+            autoComplete="off"
+            placeholder={toLangDigits('0', lang)}
+            value={toLangDigits(text, lang)}
+            size={text.length || 1} // the width where field-sizing isn't supported yet
+            onChange={(e) => onTextChange(editAmount(text, e.target.value))}
+            // h-16: field-sizing alone makes the box 119px tall (Anek's Bangla ascent); 64px fits the 64px digits and the screen.
+            className="field-sizing-content h-16 min-w-0 rounded-xl bg-transparent text-center font-amount text-hero font-semibold text-text placeholder:text-text-muted"
+          />
+        </div>
+      </ViewTransition>
     </div>
   )
 }

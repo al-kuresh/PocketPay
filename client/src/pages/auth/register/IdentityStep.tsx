@@ -61,7 +61,7 @@ export function IdentityStep({ defaultValues, onDone }: IdentityStepProps) {
       onSubmit={handleSubmit((v) => onDone({ ...v, shopName: v.role === 'MERCHANT' ? v.shopName : undefined }))}
       className="flex flex-1 flex-col gap-6"
     >
-      <h2 className="text-xl font-semibold text-text">{t('register.identity.heading')}</h2>
+      <h2 className="font-display text-xl font-semibold text-text">{t('register.identity.heading')}</h2>
       <Input label={t('register.identity.name')} autoComplete="name" error={message(errors.name?.message)} {...register('name')} />
       <Input
         label={t('register.identity.dob')}

@@ -49,7 +49,20 @@
 
   /* Motion. Use with duration-150 (hover, press) or duration-200 (reveals). */
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
-  --duration-hold: 1200ms; /* hold to send: HOLD_MS in HoldToSendButton.tsx */
+  /* The one signature moment, on the Sent screen: the tick draws, then the amount rises. */
+  --animate-tick: tick-draw 500ms var(--ease-out-quint) 150ms both;
+  --animate-rise: rise 500ms var(--ease-out-quint) 500ms both;
+  @keyframes tick-draw {
+    from {
+      stroke-dashoffset: 1; /* the path has pathLength=1 and a dash of 1 */
+    }
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(1.5rem);
+    }
+  }
 }
 
 /* Hold to send: the fill sweeps across the button for the whole hold and snaps back when let go. Under reduced
@@ -58,11 +71,16 @@
   clip-path: inset(0 100% 0 0);
   [data-holding='true'] > & {
     clip-path: inset(0);
-    transition: clip-path var(--duration-hold) linear;
+    transition: clip-path var(--hold-ms) linear; /* set inline from HOLD_MS by HoldToSendButton */
     @media (prefers-reduced-motion: reduce) {
       transition: none;
     }
   }
+}
+
+/* A long press on a phone opens no iOS callout (the link/image menu). Hold to send. */
+@utility callout-none {
+  -webkit-touch-callout: none;
 }
 
 /* Hero amounts: Anek Bangla at its narrow width (the wdth axis), digits lined up (TASTE.md). */
@@ -100,5 +118,11 @@ body {
     animation-duration: 0.01ms !important; /* design-ok: reduced-motion reset */
     transition-duration: 0.01ms !important; /* design-ok */
     scroll-behavior: auto !important;
+  }
+  /* Screen transitions (<ViewTransition>): just navigate. */
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }

@@ -9,7 +9,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { Initials } from '../../components/ui/Initials'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { errorMessage } from '../../i18n/errors'
-import { formatDateTime } from '../../lib/dates'
+import { formatWhen } from '../../lib/dates'
 import { formatTaka } from '../../lib/money'
 import { useLanguage } from '../../stores/language'
 
@@ -58,7 +58,7 @@ export function HistorySkeleton() {
   )
 }
 
-/** One history row: initials tinted by direction, who, what and when; the amount signed (+ in, − out) and coloured. Tapping it opens the receipt. */
+/** One history row: initials tinted by direction, who, what and when ("7:42 pm", "Yesterday", "23 Nov"); the amount signed (+ in, − out) and coloured. Tapping it opens the receipt. */
 export function HistoryRow({ item }: { item: HistoryItem }) {
   const { t } = useTranslation()
   const lang = useLanguage((s) => s.lang)
@@ -73,7 +73,7 @@ export function HistoryRow({ item }: { item: HistoryItem }) {
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="truncate text-base text-text">{item.counterparty.name}</span>
           <span className="text-sm text-text-muted">
-            {t(`flows.${item.type}.title`)} · {formatDateTime(item.createdAt, lang)}
+            {t(`flows.${item.type}.title`)} · {formatWhen(item.createdAt, lang)}
           </span>
         </span>
         <span className={`shrink-0 font-display text-base font-semibold tabular-nums ${out ? 'text-danger' : 'text-success-dark'}`}>

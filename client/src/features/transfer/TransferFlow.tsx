@@ -1,12 +1,13 @@
 import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, CircleCheck, Share2 } from 'lucide-react'
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { ArrowRight } from 'lucide-react'
+import { startTransition, useEffect, useId, useRef, useState, ViewTransition, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router'
 import { ApiError } from '../../api/client'
 import { lookup, preview as fetchPreview, transfer } from '../../api/transactions'
-import type { Party, Preview, Receipt, TxType } from '../../api/types'
+import type { Preview, Receipt, TxType } from '../../api/types'
 import { AppShell } from '../../components/layout/AppShell'
+import { MobileShell } from '../../components/layout/MobileShell'
 import { AmountChips, AmountField, AmountKeypad } from '../../components/ui/AmountKeypad'
 import { Button } from '../../components/ui/Button'
 import { HoldToSendButton } from '../../components/ui/HoldToSendButton'
@@ -16,12 +17,11 @@ import { PinInput, type PinInputHandle } from '../../components/ui/PinInput'
 import { Stitch } from '../../components/ui/Stitch'
 import { useToast } from '../../components/ui/toast-context'
 import { errorMessage } from '../../i18n/errors'
-import { copyText } from '../../lib/clipboard'
-import { formatDateTime } from '../../lib/dates'
 import { formatTaka, takaToPoisha } from '../../lib/money'
 import { phoneSchema } from '../../lib/validation'
-import { useLanguage, type Lang } from '../../stores/language'
+import { useLanguage } from '../../stores/language'
 import { FLOWS, type Flow } from './flows'
+import { Counterparty, ReceiptCard, ShareButton } from './ReceiptCard'
 
 type Step = 'enter' | 'confirm' | 'receipt'
 
@@ -82,19 +82,25 @@ export function TransferFlow({ type }: { type: TxType }) {
   function openConfirm(p: Preview) {
     const phone = p.receiver.phone ?? ''
     if (!key || key.phone !== phone || key.amount !== p.amount) setKey({ value: uuidV4(), phone, amount: p.amount })
-    setPreview(p)
-    setStep('confirm')
+    // In a transition, so <ViewTransition name="amount"> carries the amount from the keypad to Confirm to Sent.
+    startTransition(() => {
+      setPreview(p)
+      setStep('confirm')
+    })
   }
 
   function succeed(r: Receipt) {
-    setReceipt(r)
-    setStep('receipt')
+    startTransition(() => {
+      setReceipt(r)
+      setStep('receipt')
+    })
     void queryClient.invalidateQueries({ queryKey: ['me'] })
     void queryClient.invalidateQueries({ queryKey: ['history'] })
   }
 
-  const onBack =
-    step === 'enter' ? () => void navigate('/') : step === 'receipt' ? undefined : () => setStep('enter')
+  if (step === 'receipt' && receipt) return <SentView receipt={receipt} />
+
+  const onBack = step === 'enter' ? () => void navigate('/') : () => startTransition(() => setStep('enter'))
 
   return (
     <AppShell
@@ -114,7 +120,6 @@ export function TransferFlow({ type }: { type: TxType }) {
           onSuccess={succeed}
         />
       )}
-      {step === 'receipt' && receipt && <ReceiptView receipt={receipt} />}
     </AppShell>
   )
 }
@@ -334,13 +339,16 @@ function ConfirmStep({ flow, preview, note, onNoteChange, idempotencyKey, onSucc
         </div>
         <div className="flex items-baseline justify-between gap-3 p-6 pt-4">
           <p className="text-base text-text-muted">{t('transfer.total')}</p>
-          <p className="font-amount text-4xl font-semibold text-text">{formatTaka(preview.total, { lang })}</p>
+          <ViewTransition name="amount">
+            <p className="font-amount text-4xl font-semibold text-text">{formatTaka(preview.total, { lang })}</p>
+          </ViewTransition>
         </div>
       </div>
       <PinInput
         disabled={send.isPending}
         ref={pinInput}
         label={t('transfer.pin')}
+        lock
         error={failure?.code === 'INVALID_PIN' ? failure.message : undefined}
         onChange={(value) => {
           pin.current = value
@@ -357,7 +365,7 @@ function ConfirmStep({ flow, preview, note, onNoteChange, idempotencyKey, onSucc
           label={
             failure?.code === 'NETWORK_ERROR'
               ? t('transfer.tryAgain')
-              : t('transfer.holdToSend', { amount: formatTaka(preview.total, { lang }) })
+              : t(`flows.${preview.type}.hold`, { amount: formatTaka(preview.total, { lang }) })
           }
           disabled={length < PIN_LENGTH}
           loading={send.isPending}
@@ -368,66 +376,59 @@ function ConfirmStep({ flow, preview, note, onNoteChange, idempotencyKey, onSucc
   )
 }
 
-/** "-50500" → "−৳505.00" (out); "+50000" or "50000" → "+৳500.00" (in). formatTaka itself only takes digits. */
-function signedTaka(amount: string, lang: Lang) {
-  const out = amount.startsWith('-')
-  return { out, text: formatTaka(amount.replace(/^[-+]/, ''), { sign: out ? 'out' : 'in', lang }) }
-}
-
-/** A receipt: the flow's last step, and the receipt page (`/transactions/:trxId`). */
-export function ReceiptView({ receipt }: { receipt: Receipt }) {
+/**
+ * The flow's last step, like the canvas: the orange block with the stitched ring, the tick drawing itself, "Money
+ * sent" and the amount rising into place (the one signature moment), then the receipt card, Share and Done. Under
+ * reduced motion nothing animates: the tick is simply drawn and the amount simply there.
+ */
+function SentView({ receipt }: { receipt: Receipt }) {
   const { t } = useTranslation()
   const lang = useLanguage((s) => s.lang)
   const navigate = useNavigate()
-  const toast = useToast()
   const headingId = useId()
-  const mine = signedTaka(receipt.mine.amount, lang)
-
-  async function share() {
-    if (typeof navigator.share === 'function') {
-      try {
-        await navigator.share({ text: t('transfer.shareText', { trxId: receipt.trxId }) })
-        return
-      } catch (e) {
-        if (e instanceof DOMException && e.name === 'AbortError') return // the user closed the share sheet
-        // anything else (NotAllowedError, no share target): copy instead
-      }
-    }
-    if (await copyText(receipt.trxId)) toast.show(t('transfer.copied'), 'success')
-    else toast.show(t('transfer.copyByHand', { trxId: receipt.trxId })) // the user can still read it off the toast
-  }
-
   return (
-    <section aria-labelledby={headingId} className="flex flex-1 flex-col gap-6">
-      <div className="flex flex-col items-center gap-2 text-center">
-        {/* design-ok: base success colours only this icon (TASTE.md) */}
-        <CircleCheck aria-hidden className="size-12 text-success" />
-        <h2 id={headingId} className="text-lg font-semibold text-text">
-          {t('transfer.success')}
-        </h2>
-        <p className={`text-3xl font-semibold tabular-nums ${mine.out ? 'text-danger' : 'text-success-dark'}`}>{mine.text}</p>
-      </div>
-      <dl className="flex flex-col gap-3">
-        <Row label={t('transfer.trxId')}>{receipt.trxId}</Row>
-        <Row label={t('transfer.from')}>
-          <PartyLines party={receipt.from} />
-        </Row>
-        <Row label={t('transfer.to')}>
-          <PartyLines party={receipt.to} />
-        </Row>
-        <Row label={t('transfer.amount')}>{formatTaka(receipt.amount, { lang })}</Row>
-        <Row label={t('transfer.fee')}>{formatTaka(receipt.fee, { lang })}</Row>
-        <Row label={t('transfer.balanceAfter')}>{formatTaka(receipt.mine.balanceAfter, { lang })}</Row>
-        <Row label={t('transfer.time')}>{formatDateTime(receipt.createdAt, lang)}</Row>
-      </dl>
-      <div className="mt-auto flex flex-col gap-3">
-        <Button onClick={() => void navigate('/')}>{t('transfer.done')}</Button>
-        <Button variant="secondary" onClick={() => void share()}>
-          <Share2 aria-hidden className="size-5" />
-          {t('transfer.share')}
-        </Button>
-      </div>
-    </section>
+    <MobileShell>
+      <section aria-labelledby={headingId} className="flex flex-1 flex-col bg-canvas">
+        {/* pb-16: the card overlaps the block's lower edge, like Home's action panel. */}
+        <div className="flex flex-col items-center gap-3 rounded-b-3xl bg-primary-dark px-6 pt-safe pb-16 text-center text-white">
+          <div className="relative mt-12 flex size-20 items-center justify-center">
+            <Stitch shape="circle" className="absolute inset-0 size-full stroke-thread" />
+            <span className="flex size-14 items-center justify-center rounded-full bg-white">
+              <svg aria-hidden viewBox="0 0 24 24" className="size-8 stroke-primary-dark">
+                {/* pathLength 1 and a dash of 1: the animation draws it from dashoffset 1 to 0. */}
+                <path
+                  data-tick
+                  d="M5 12.5l4.5 4.5L19 7.5"
+                  pathLength={1}
+                  strokeDasharray="1"
+                  fill="none"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="animate-tick motion-reduce:animate-none"
+                />
+              </svg>
+            </span>
+          </div>
+          <h1 id={headingId} className="mt-3 font-display text-xl font-semibold">
+            {t('transfer.success')}
+          </h1>
+          <ViewTransition name="amount">
+            <p className="font-amount text-hero font-semibold animate-rise motion-reduce:animate-none">
+              {formatTaka(receipt.amount, { lang })}
+            </p>
+          </ViewTransition>
+          <Counterparty receipt={receipt} />
+        </div>
+        <div className="-mt-12 flex flex-1 flex-col gap-6 px-6 pb-6">
+          <ReceiptCard receipt={receipt} />
+          <div className="mt-auto grid grid-cols-2 gap-3 pb-safe">
+            <ShareButton trxId={receipt.trxId} />
+            <Button onClick={() => void navigate('/')}>{t('transfer.done')}</Button>
+          </div>
+        </div>
+      </section>
+    </MobileShell>
   )
 }
 
@@ -437,14 +438,5 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
       <dt className="text-sm text-text-muted">{label}</dt>
       <dd className="text-right text-sm tabular-nums text-text">{children}</dd>
     </div>
-  )
-}
-
-function PartyLines({ party }: { party: Party }) {
-  return (
-    <>
-      <span className="block">{party.name}</span>
-      {party.phone && <span className="block text-text-muted">{party.phone}</span>}
-    </>
   )
 }

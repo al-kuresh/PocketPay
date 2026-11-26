@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useRef, useState } from 'react'
+import { LoaderCircle } from 'lucide-react'
+import { useId, useRef, useState } from 'react'
 import { useController, useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
@@ -55,8 +56,8 @@ export function Login() {
   return (
     <AppShell headerEnd={<LanguageToggle />}>
       <div className="flex flex-col gap-2">
-        <p className="text-3xl font-semibold text-primary">{t('app.name')}</p>
-        <h1 className="text-xl font-semibold text-text">{t('login.title')}</h1>
+        <p className="font-display text-3xl font-semibold text-primary">{t('app.name')}</p>
+        <h1 className="font-display text-xl font-semibold text-text">{t('login.title')}</h1>
       </div>
 
       <form noValidate onSubmit={(e) => void handleSubmit((v) => signIn(v.phone, v.pin, 'form'))(e)} className="flex flex-col gap-4">
@@ -85,22 +86,49 @@ export function Login() {
       </p>
 
       <section className="flex flex-col gap-3 border-t border-border pt-6">
-        <h2 className="text-base font-semibold text-text">{t('login.demo.title')}</h2>
+        <h2 className="font-display text-xl font-semibold text-text">{t('login.demo.title')}</h2>
         <p className="text-sm text-text-muted">{t('login.demo.hint')}</p>
         <div className="grid grid-cols-2 gap-3">
           {DEMO.map(({ role, phone }) => (
-            <Button
-              key={role}
-              variant="secondary"
-              loading={busy === role}
-              disabled={busy !== null}
-              onClick={() => signIn(phone, DEMO_PIN, role)}
-            >
-              {t(`login.demo.${role}`)}
-            </Button>
+            <DemoCard key={role} title={t(`login.demo.${role}`)} phone={phone} busy={busy === role} disabled={busy !== null} onClick={() => signIn(phone, DEMO_PIN, role)} />
           ))}
         </div>
       </section>
     </AppShell>
+  )
+}
+
+interface DemoCardProps {
+  /** Already translated: the role, which is also the card's accessible name. */
+  title: string
+  phone: string
+  busy: boolean
+  disabled: boolean
+  onClick(): void
+}
+
+/** One demo account as a card: the role in the display face, its seeded number underneath (the description). */
+function DemoCard({ title, phone, busy, disabled, onClick }: DemoCardProps) {
+  const id = useId()
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      aria-busy={busy || undefined}
+      aria-labelledby={`${id}-title`}
+      aria-describedby={`${id}-phone`}
+      onClick={onClick}
+      className="flex min-h-11 flex-col items-start gap-1 rounded-3xl border border-border bg-surface p-4 text-left transition duration-150 ease-out-quint enabled:hover:border-primary-dark enabled:active:scale-95 disabled:cursor-not-allowed disabled:bg-surface-sunken"
+    >
+      <span className="flex items-center gap-2">
+        <span id={`${id}-title`} className="font-display text-base font-semibold text-text">
+          {title}
+        </span>
+        {busy && <LoaderCircle aria-hidden className="size-4 animate-spin text-primary-dark" />}
+      </span>
+      <span id={`${id}-phone`} className="text-sm tabular-nums text-text-muted">
+        {phone}
+      </span>
+    </button>
   )
 }

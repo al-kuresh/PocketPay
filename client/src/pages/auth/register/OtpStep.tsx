@@ -68,10 +68,10 @@ export function OtpStep({ phone, sent, onDone }: OtpStepProps) {
   return (
     <form noValidate onSubmit={handleSubmit(submit)} className="flex flex-1 flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <h2 className="text-xl font-semibold text-text">{t('register.otp.heading')}</h2>
+        <h2 className="font-display text-xl font-semibold text-text">{t('register.otp.heading')}</h2>
         <p className="text-sm text-text-muted">{t('register.otp.sentTo', { phone })}</p>
       </div>
-      {devOtp && <p className="rounded-xl bg-primary-50 p-4 text-sm text-text">{t('register.otp.devHint', { code: devOtp })}</p>}
+      {devOtp && <p className="rounded-3xl bg-primary-50 p-4 text-sm text-text">{t('register.otp.devHint', { code: devOtp })}</p>}
       <div className="flex flex-col gap-2">
         <Input
           label={t('register.otp.label')}
