@@ -60,6 +60,9 @@ export const photoUploadLimiter = createLimiter({
   keyGenerator: byUser,
 });
 
+/** POST /kyc/resubmit: 5 per hour per user. Each one holds up to 3 × 10 MB in memory and 4 sharp decodes. */
+export const kycResubmitLimiter = createLimiter({ windowMs: 60 * MINUTE, limit: 5, keyGenerator: byUser });
+
 /** Every /admin/* route: 120 per minute per admin, its own budget. */
 export const adminLimiter = createLimiter({ windowMs: MINUTE, limit: 120, keyGenerator: byUser });
 

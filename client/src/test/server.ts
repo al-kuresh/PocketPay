@@ -13,6 +13,8 @@ export const server = setupServer(
     HttpResponse.json({ success: true, data: { user: useSession.getState().user, wallet: { id: 'w1', type: 'CUSTOMER', balance: '0' } } }),
   ),
   http.get('/api/v1/transactions', () => HttpResponse.json({ success: true, data: { items: [], nextCursor: null } })),
+  // A REJECTED user's home banner asks for the reason.
+  http.get('/api/v1/kyc', () => HttpResponse.json({ success: true, data: null })),
 )
 
 /** The API's error envelope, for MSW handlers. */

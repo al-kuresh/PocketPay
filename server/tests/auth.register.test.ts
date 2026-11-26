@@ -313,7 +313,7 @@ describe('POST /auth/register/complete', () => {
     expect(storage.objects.size).toBe(0); // the uploads were cleaned up
   });
 
-  it('logs only the key and access when a cleanup delete fails', async () => {
+  it('logs only the kind and access (no storage key) when a cleanup delete fails', async () => {
     class BrokenStorage extends MemoryStorage {
       calls = 0;
       async put(o: Parameters<MemoryStorage['put']>[0]) {
@@ -335,10 +335,10 @@ describe('POST /auth/register/complete', () => {
     const cleanupWarnings = warn.mock.calls.filter(([, msg]) => msg === 'Upload cleanup failed');
     expect(cleanupWarnings).toHaveLength(3);
     for (const [fields] of cleanupWarnings) {
-      expect(Object.keys(fields as object).sort()).toEqual(['access', 'key']);
+      expect(Object.keys(fields as object).sort()).toEqual(['access', 'kind']);
     }
     const logged = JSON.stringify(warn.mock.calls);
-    for (const secret of [NID, PIN, DOB, 'Rahim']) expect(logged).not.toContain(secret);
+    for (const secret of [NID, PIN, DOB, 'Rahim', 'kyc/', 'profile/']) expect(logged).not.toContain(secret);
     warn.mockRestore();
   });
 

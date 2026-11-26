@@ -43,7 +43,7 @@ export const ERROR_CODES = [
   'IDEMPOTENCY_KEY_REUSED',
   'TRANSACTION_NOT_FOUND',
   'WALLET_NOT_FOUND',
-  // admin and files
+  // admin, files and KYC
   'LINK_EXPIRED_OR_INVALID',
   'KYC_NOT_FOUND',
   'KYC_ALREADY_REVIEWED',
@@ -51,6 +51,7 @@ export const ERROR_CODES = [
   'USER_STATUS_CHANGED',
   'USER_NOT_FOUND',
   'CANNOT_MODIFY_ADMIN',
+  'KYC_RESUBMIT_NOT_ALLOWED',
   // any endpoint
   'INVALID_JSON',
   'PAYLOAD_TOO_LARGE',

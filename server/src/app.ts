@@ -12,6 +12,7 @@ import { LOCAL_UPLOADS_DIR, LocalStorage } from './lib/storage/local';
 import { createAdminRouter } from './modules/admin/admin.routes';
 import { createAuthRouter } from './modules/auth/auth.routes';
 import { createFilesRouter } from './modules/files/files.routes';
+import { createKycRouter } from './modules/kyc/kyc.routes';
 import { healthRouter } from './modules/health/health.routes';
 import { createMeRouter } from './modules/me/me.routes';
 import { transactionsRouter } from './modules/transactions/transactions.routes';
@@ -47,6 +48,7 @@ export function createApp(deps: AppDeps = {}): Express {
   app.use('/api/v1', healthRouter);
   app.use('/api/v1/auth', createAuthRouter(authDeps));
   app.use('/api/v1/me', createMeRouter({ storage: authDeps.storage }));
+  app.use('/api/v1/kyc', createKycRouter(authDeps));
   app.use('/api/v1/transactions', transactionsRouter);
   app.use('/api/v1/wallets', walletsRouter);
   app.use('/api/v1/admin', createAdminRouter({ storage: authDeps.storage }));

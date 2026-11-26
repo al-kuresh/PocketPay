@@ -318,6 +318,56 @@ private NID and selfie images are never changed.
 
 ---
 
+## KYC
+
+### `GET /kyc`
+
+The caller's latest KYC submission. **Auth:** `Authorization: Bearer <accessToken>`, any role.
+
+**200**: `data` is `null` when there is no submission (admins).
+
+```json
+{ "success": true, "data": { "status": "REJECTED", "reason": "The NID photo is blurry. Please retake it in good light.", "submittedAt": "2026-11-19T08:00:00.000Z", "reviewedAt": "2026-11-20T08:00:00.000Z" } }
+```
+
+`reason` is the admin's rejection reason (`"auto-approved"` for an auto-approved one, `null` while pending).
+
+### `POST /kyc/resubmit`
+
+A `REJECTED` user sends 3 new images. **Auth:** `Authorization: Bearer <accessToken>`, checked
+**before** the upload is read. **Body:** `multipart/form-data` with `nidFront`, `nidBack`, `selfie`:
+JPEG, PNG or WebP (checked by content), max 10 MB each, as at registration. **Limit:** 5 an hour per user.
+
+```bash
+curl -X POST http://localhost:4000/api/v1/kyc/resubmit \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -F nidFront=@front.jpg -F nidBack=@back.jpg -F selfie=@selfie.jpg
+```
+
+**201**
+
+```json
+{ "success": true, "data": { "user": { "…PublicUser…": "", "status": "PENDING_KYC", "kycStatus": "PENDING" }, "kyc": { "status": "PENDING", "reason": null, "submittedAt": "…", "reviewedAt": null } } }
+```
+
+A new `PENDING` submission; the user becomes `PENDING_KYC` (a customer becomes `ACTIVE` with an
+`APPROVED` submission when the server runs with `KYC_AUTO_APPROVE=true`, as at registration). The
+selfie's 512×512 copy replaces the profile photo. Earlier submissions and their images are kept
+for the admin's history. Two resubmits at once create **one** submission; the other is a 409.
+
+| Error | When |
+|---|---|
+| `401 UNAUTHENTICATED` | missing, expired or invalid access token |
+| `409 KYC_RESUBMIT_NOT_ALLOWED` | the user isn't `REJECTED` (pending, active, frozen, or a parallel resubmit won). Nothing changed |
+| `400 MISSING_FILE` | one of the 3 images is missing. `details: { field }` |
+| `400 VALIDATION_ERROR` | malformed upload: an unknown file field or too many files (`details: { field, reason }`) |
+| `413 FILE_TOO_LARGE` | an image is over 10 MB |
+| `415 UNSUPPORTED_FILE_TYPE` | not JPEG/PNG/WebP, damaged, or over 50 megapixels. Nothing changed |
+| `502 UPLOAD_FAILED` | the photos couldn't be stored. Nothing changed; retrying is safe |
+| `429 RATE_LIMITED` | more than 5 resubmits in an hour |
+
+---
+
 ## Money
 
 All endpoints below need `Authorization: Bearer <accessToken>`. Examples use the
@@ -606,7 +656,7 @@ also appear here mean the same: `ACCOUNT_LOCKED` (423, shared lockout with login
 | `TRANSACTION_NOT_FOUND` | 404 | | no |
 | `WALLET_NOT_FOUND` | 404 | | no (an internal ledger check; not expected from these endpoints) |
 
-Admin and file codes (`/admin/*` and `/files/private/*`). `FORBIDDEN` (not an admin),
+Admin, file and KYC codes (`/admin/*`, `/files/private/*` and `/kyc/*`). `FORBIDDEN` (not an admin),
 `UNAUTHENTICATED`, `VALIDATION_ERROR` and `RATE_LIMITED` (120 a minute per admin) mean the same as above.
 
 | Code | HTTP | Details | Retry? |
@@ -618,6 +668,9 @@ Admin and file codes (`/admin/*` and `/files/private/*`). `FORBIDDEN` (not an ad
 | `USER_STATUS_CHANGED` | 409 | `{ status }` (the user's status now) | no: reload. Also: freeze from anything but `ACTIVE`, unfreeze from anything but `FROZEN` |
 | `USER_NOT_FOUND` | 404 | | no |
 | `CANNOT_MODIFY_ADMIN` | 422 | | no: admins can't act on admin accounts, their own included |
+| `KYC_RESUBMIT_NOT_ALLOWED` | 409 | | no: `POST /kyc/resubmit` is only for a `REJECTED` user |
+
+Every `/admin/*` response, errors included, is sent with `Cache-Control: no-store`.
 
 Codes any endpoint can return:
 
@@ -636,5 +689,4 @@ Planned in [design.md §9](design.md#9-api-v1), not implemented yet:
 
 | Group | Endpoints | Phase |
 |---|---|---|
-| KYC | `GET /kyc`, `POST /kyc/resubmit` | 7 |
 | Admin | `/admin/stats`, `/admin/transactions`, `/admin/agents/:id/float`, `/admin/fees`, `/admin/limits`, `/admin/reconcile` (`/admin/kyc`, `/admin/users` and `/admin/audit-logs` are built in 7a; documented here in Task 8) | 7b |

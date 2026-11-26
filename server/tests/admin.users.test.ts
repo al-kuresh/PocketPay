@@ -136,6 +136,15 @@ describe('GET /admin/users', () => {
     expect((await get(`${API}?status=SLEEPING`)).status).toBe(400);
     expect((await get(`${API}?cursor=abc`)).status).toBe(400);
   });
+
+  it('every response is Cache-Control: no-store (full phone numbers), errors included', async () => {
+    await user();
+    const res = await get(API);
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect((await get(`${API}/${randomUUID()}`)).headers['cache-control']).toBe('no-store'); // 404
+    expect((await request(app).get(API)).headers['cache-control']).toBe('no-store'); // 401
+  });
 });
 
 describe('GET /admin/users/:id', () => {

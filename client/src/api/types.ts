@@ -16,6 +16,14 @@ export interface PublicUser {
   kycStatus: KycStatus | null
 }
 
+/** GET /kyc. `reason` is the admin's text for a rejection (null while pending). */
+export interface KycInfo {
+  status: KycStatus
+  reason: string | null
+  submittedAt: string
+  reviewedAt: string | null
+}
+
 export interface Wallet {
   id: string
   type: Exclude<Role, 'ADMIN'>

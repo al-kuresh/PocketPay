@@ -1,10 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { z } from 'zod';
 import { writeAudit } from '../../lib/audit';
-import { processImage } from '../../lib/images';
-import { logger } from '../../lib/logger';
 import { prisma } from '../../lib/prisma';
 import { violatedUniqueIndex } from '../../lib/prismaErrors';
+import { deleteObjects, documentRows, type KycImages, prepareKycObjects, uploadObjects } from '../kyc/kycDocuments';
 import type { StorageProvider } from '../../lib/storage';
 import { AppError } from '../../utils/AppError';
 import type { completeRegistrationBody } from './auth.schemas';
@@ -14,11 +13,7 @@ import { signAccessToken, type RegistrationClaims } from './tokens';
 import { toPublicUser } from './user.presenter';
 
 export type CompleteRegistrationInput = z.output<typeof completeRegistrationBody>;
-export interface KycImages {
-  nidFront: Buffer;
-  nidBack: Buffer;
-  selfie: Buffer;
-}
+export type { KycImages };
 
 const tokenInvalid = () =>
   new AppError(401, 'REGISTRATION_TOKEN_INVALID', 'Registration session is invalid or has expired');
@@ -49,58 +44,16 @@ export async function completeRegistration(input: {
   });
   if (existing) throw existing.phone === claims.phone ? phoneTaken() : nidTaken();
 
-  // 3. Check and re-encode every image before uploading anything. Only these WebP outputs are
-  //    stored; the original uploads (with their EXIF) never leave this function.
-  const [nidFront, nidBack, selfie, avatar] = await Promise.all([
-    processImage(images.nidFront, { mode: 'document' }),
-    processImage(images.nidBack, { mode: 'document' }),
-    processImage(images.selfie, { mode: 'document' }),
-    processImage(images.selfie, { mode: 'avatar' }),
-  ]);
+  // 3. Check and re-encode every image (415 on a bad file) before uploading anything.
+  const userId = randomUUID();
+  const objs = await prepareKycObjects(userId, images);
   const pinHash = await hashPin(body.pin);
 
-  // 4. Upload. Each object gets its document id up front so the KYC row can reference it.
-  const userId = randomUUID();
-  const doc = (
-    kind: 'NID_FRONT' | 'NID_BACK' | 'SELFIE' | 'PROFILE',
-    access: 'PRIVATE' | 'PUBLIC',
-    image: typeof nidFront,
-    key: string,
-  ) => ({ id: randomUUID(), kind, access, image, key });
-  const front = doc('NID_FRONT', 'PRIVATE', nidFront, `kyc/${userId}/nid-front-${randomUUID()}.webp`);
-  const back = doc('NID_BACK', 'PRIVATE', nidBack, `kyc/${userId}/nid-back-${randomUUID()}.webp`);
-  const selfieDoc = doc('SELFIE', 'PRIVATE', selfie, `kyc/${userId}/selfie-${randomUUID()}.webp`);
-  const profile = doc('PROFILE', 'PUBLIC', avatar, `profile/${userId}/${randomUUID()}.webp`);
-  const objects = [front, back, selfieDoc, profile];
-  const uploaded: typeof objects = [];
+  // 4. Upload. On a partial failure the uploaded ones are deleted and this is a 502.
+  await uploadObjects(storage, objs.all);
 
   let created;
   try {
-    const succeeded = await Promise.all(
-      objects.map(async (o) => {
-        try {
-          await storage.put({
-            key: o.key,
-            body: o.image.data,
-            contentType: o.image.mime,
-            access: o.access,
-          });
-          uploaded.push(o);
-          return true;
-        } catch (err) {
-          // The storage error says what went wrong; the key says which object. No user data.
-          logger.error(
-            { key: o.key, access: o.access, err: err instanceof Error ? err.message : String(err) },
-            'Upload failed',
-          );
-          return false;
-        }
-      }),
-    );
-    if (succeeded.includes(false)) {
-      throw new AppError(502, 'UPLOAD_FAILED', 'Could not save your photos. Please try again');
-    }
-
     // 5. Everything in one transaction: either the whole account exists, or none of it does.
     const autoApproved = kycAutoApprove && body.role === 'CUSTOMER';
     created = await prisma.$transaction(async (tx) => {
@@ -126,31 +79,19 @@ export async function completeRegistration(input: {
           pinHash,
           role: body.role,
           status: autoApproved ? 'ACTIVE' : 'PENDING_KYC',
-          profilePhotoKey: profile.key,
+          profilePhotoKey: objs.profile.key,
         },
       });
       // Registration roles are a subset of wallet types; balance starts at 0 (the one write
       // to wallets outside postTransaction).
       await tx.wallet.create({ data: { userId, type: body.role } });
-      await tx.userDocument.createMany({
-        data: objects.map((o) => ({
-          id: o.id,
-          userId,
-          kind: o.kind,
-          storageKey: o.key,
-          access: o.access,
-          mime: o.image.mime,
-          sizeBytes: o.image.sizeBytes,
-          width: o.image.width,
-          height: o.image.height,
-        })),
-      });
+      await tx.userDocument.createMany({ data: documentRows(userId, objs.all) });
       await tx.kycSubmission.create({
         data: {
           userId,
-          nidFrontId: front.id,
-          nidBackId: back.id,
-          selfieId: selfieDoc.id,
+          nidFrontId: objs.front.id,
+          nidBackId: objs.back.id,
+          selfieId: objs.selfie.id,
           ...(autoApproved && {
             status: 'APPROVED',
             reason: 'auto-approved',
@@ -180,17 +121,7 @@ export async function completeRegistration(input: {
     });
   } catch (err) {
     // 6. No account was committed, so nothing may point at these objects: delete them all.
-    //    Best effort: a failed delete must not hide the original error, but it is logged
-    //    (key and access only) so the orphaned object can be found and removed.
-    await Promise.all(
-      uploaded.map(async (o) => {
-        try {
-          await storage.delete(o.key, o.access);
-        } catch {
-          logger.warn({ key: o.key, access: o.access }, 'Upload cleanup failed');
-        }
-      }),
-    );
+    await deleteObjects(storage, objs.all);
 
     const index = violatedUniqueIndex(err);
     if (index === 'users_phone_key') throw phoneTaken();

@@ -2,8 +2,9 @@ import type { Request, RequestHandler } from 'express';
 import type { OtpProvider } from '../../lib/otp';
 import type { StorageProvider } from '../../lib/storage';
 import { AppError } from '../../utils/AppError';
+import { kycImagesFrom } from '../../middlewares/upload';
 import { requestOtp, verifyOtp } from './otp.service';
-import { completeRegistration, type KycImages } from './registration.service';
+import { completeRegistration } from './registration.service';
 import { changePin, login, logout, refreshSession } from './session.service';
 import {
   clearRefreshCookie,
@@ -26,8 +27,6 @@ export interface AuthDeps {
   kycAutoApprove: boolean;
 }
 
-const KYC_FILES = ['nidFront', 'nidBack', 'selfie'] as const;
-
 // Thin layer: read the (already validated) request, call the service, send the response.
 export function createAuthController(deps: AuthDeps) {
   const requestOtpHandler: RequestHandler = async (req, res) => {
@@ -39,15 +38,7 @@ export function createAuthController(deps: AuthDeps) {
   };
 
   const completeHandler: RequestHandler = async (req, res) => {
-    const files = (req.files ?? {}) as Record<string, Express.Multer.File[] | undefined>;
-    const images = {} as KycImages;
-    for (const field of KYC_FILES) {
-      const file = files[field]?.[0];
-      if (!file) {
-        throw new AppError(400, 'MISSING_FILE', `Please upload the ${field} image`, { field });
-      }
-      images[field] = file.buffer;
-    }
+    const images = kycImagesFrom(req);
 
     const result = await completeRegistration({
       claims: res.locals.registration as RegistrationClaims,

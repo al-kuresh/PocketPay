@@ -70,9 +70,16 @@
     },
     "rejected": {
       "title": "Your documents were not approved",
-      "body": "Money actions are off. Please contact support."
+      "body": "Money actions are off until your new documents are approved.",
+      "reason": "Reason:"
     },
-    "demo": "Demo app: do not upload a real NID. Any photo works."
+    "demo": "Demo app: do not upload a real NID. Any photo works.",
+    "resubmit": {
+      "button": "Resubmit documents",
+      "title": "Resubmit documents",
+      "intro": "Take new photos of both sides of your NID and a new selfie. We'll check them again.",
+      "submit": "Send for review"
+    }
   },
   "app": {
     "name": "PocketPay"
@@ -188,6 +195,7 @@
     "USER_STATUS_CHANGED": "This account's status has changed. Reload the page.",
     "USER_NOT_FOUND": "User not found.",
     "CANNOT_MODIFY_ADMIN": "Admin accounts can't be changed here.",
+    "KYC_RESUBMIT_NOT_ALLOWED": "You can send documents again only after they were not approved.",
     "INVALID_JSON": "Something went wrong. Please try again.",
     "PAYLOAD_TOO_LARGE": "This is too large to send.",
     "NOT_FOUND": "Not found.",

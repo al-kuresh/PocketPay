@@ -1,4 +1,4 @@
-import { type Request, Router } from 'express';
+import { type Request, type RequestHandler, Router } from 'express';
 import type { StorageProvider } from '../../lib/storage';
 import { requireAuth, requireRole } from '../../middlewares/auth';
 import { adminLimiter } from '../../middlewares/rateLimit';
@@ -19,22 +19,29 @@ import { listAudit } from './audit.service';
 import { getKyc, listKyc, reviewKyc } from './kyc.service';
 import { changeUserStatus, getUser, listUsers, unlockUser } from './users.service';
 
+const noStore: RequestHandler = (_req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+};
+
 const actor = (req: Request): Actor => ({ id: req.user!.id, ip: req.ip });
 const idOf = (res: { locals: Record<string, unknown> }) => (res.locals.params as { id: string }).id;
 
-/** /api/v1/admin/*: admins only, 120 requests a minute per admin. */
+/**
+ * /api/v1/admin/*: admins only, 120 requests a minute per admin. Every response, errors included,
+ * is `no-store`: admin data (full phone numbers, the full NID, signed links) never sits in a cache.
+ */
 export function createAdminRouter(deps: { storage: StorageProvider }): Router {
   const router = Router();
-  router.use(requireAuth, requireRole('ADMIN'), adminLimiter);
+  router.use(noStore, requireAuth, requireRole('ADMIN'), adminLimiter);
 
   router.get('/kyc', validateQuery(kycListQuery), async (_req, res) => {
     res.json({ success: true, data: await listKyc(res.locals.query as KycListQuery) });
   });
 
-  // The full NID and signed image links: never cached.
+  // The full NID and signed image links (no-store, as every admin response).
   router.get('/kyc/:id', validateParams(idParams), async (req, res) => {
-    const data = await getKyc(idOf(res), deps.storage, actor(req));
-    res.set('Cache-Control', 'no-store').json({ success: true, data });
+    res.json({ success: true, data: await getKyc(idOf(res), deps.storage, actor(req)) });
   });
 
   router.patch('/kyc/:id', validateParams(idParams), validateBody(kycReviewBody), async (req, res) => {

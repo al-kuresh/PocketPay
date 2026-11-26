@@ -51,6 +51,14 @@ describe('GET /admin/audit-logs', () => {
     expect(res.body.data).toBeUndefined();
   });
 
+  it('is Cache-Control: no-store, the 403 for a non-admin included', async () => {
+    await row('LOGIN_SUCCESS', '2026-11-20T08:00:00Z');
+    const res = await get(API);
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect((await get(API, customer.token)).headers['cache-control']).toBe('no-store');
+  });
+
   it('newest first, with the actor (or null) and every item field', async () => {
     const older = await row('LOGIN_SUCCESS', '2026-11-20T08:00:00Z');
     const system = await row('SOMETHING_SYSTEM', '2026-11-21T08:00:00Z', { actorId: null });

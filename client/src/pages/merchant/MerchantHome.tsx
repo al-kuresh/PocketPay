@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { AppShell } from '../../components/layout/AppShell'
 import { Card } from '../../components/ui/Card'
-import { StatusBanner } from '../../components/ui/StatusBanner'
+import { KycBanner } from '../../features/kyc/KycBanner'
 import { ActionGrid } from '../../features/wallet/ActionGrid'
 import { HomeHero } from '../../features/wallet/HomeHero'
 import { RecentTransactions } from '../../features/wallet/RecentTransactions'
@@ -14,8 +14,7 @@ export function MerchantHome() {
   return (
     <AppShell nav hero={<HomeHero label={t('home.balance')} />}>
       <ActionGrid actions={[]} />
-      {user?.status === 'PENDING_KYC' && <StatusBanner kind="PENDING_KYC" />}
-      {user?.status === 'REJECTED' && <StatusBanner kind="REJECTED" />}
+      <KycBanner />
       <Card className="flex flex-col gap-1">
         <p className="text-sm text-text-muted">{t('merchant.yourNumber')}</p>
         <p className="font-display text-xl font-semibold tabular-nums text-text">{user?.phone}</p>

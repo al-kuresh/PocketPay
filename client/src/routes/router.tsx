@@ -2,7 +2,7 @@ import { createBrowserRouter, Navigate, type RouteObject } from 'react-router'
 import { Login } from '../pages/auth/Login'
 import { RequireActive, RequireAnonymous, RequireAuth, RequireRole } from './guards'
 import { Home } from './home'
-import { CashIn, CashOut, ChangePin, History, Payment, Profile, ReceiptPage, RegisterWizard, SendMoney } from './pages'
+import { CashIn, CashOut, ChangePin, History, KycResubmit, Payment, Profile, ReceiptPage, RegisterWizard, SendMoney } from './pages'
 
 export const routes: RouteObject[] = [
   {
@@ -21,6 +21,8 @@ export const routes: RouteObject[] = [
       { path: 'transactions/:trxId', element: <ReceiptPage /> },
       { path: 'profile', element: <Profile /> },
       { path: 'profile/pin', element: <ChangePin /> },
+      // Any role; the page itself sends anyone but a REJECTED user home.
+      { path: 'kyc/resubmit', element: <KycResubmit /> },
       {
         element: <RequireRole role="CUSTOMER" />,
         children: [
