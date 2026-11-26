@@ -60,5 +60,8 @@ export const photoUploadLimiter = createLimiter({
   keyGenerator: byUser,
 });
 
+/** Every /admin/* route: 120 per minute per admin, its own budget. */
+export const adminLimiter = createLimiter({ windowMs: MINUTE, limit: 120, keyGenerator: byUser });
+
 /** GET /wallets/lookup: 30 per minute per user, to slow down phone-number enumeration. */
 export const lookupLimiter = createLimiter({ windowMs: MINUTE, limit: 30, keyGenerator: byUser });

@@ -606,6 +606,19 @@ also appear here mean the same: `ACCOUNT_LOCKED` (423, shared lockout with login
 | `TRANSACTION_NOT_FOUND` | 404 | | no |
 | `WALLET_NOT_FOUND` | 404 | | no (an internal ledger check; not expected from these endpoints) |
 
+Admin and file codes (`/admin/*` and `/files/private/*`). `FORBIDDEN` (not an admin),
+`UNAUTHENTICATED`, `VALIDATION_ERROR` and `RATE_LIMITED` (120 a minute per admin) mean the same as above.
+
+| Code | HTTP | Details | Retry? |
+|---|---|---|---|
+| `LINK_EXPIRED_OR_INVALID` | 403 | | no: reload the KYC page for fresh links (they last 5 minutes) |
+| `KYC_NOT_FOUND` | 404 | | no |
+| `KYC_ALREADY_REVIEWED` | 409 | | no: another admin decided first. Reload |
+| `KYC_NOT_LATEST` | 409 | | no: the user sent a newer submission. Review that one |
+| `USER_STATUS_CHANGED` | 409 | `{ status }` (the user's status now) | no: reload. Also: freeze from anything but `ACTIVE`, unfreeze from anything but `FROZEN` |
+| `USER_NOT_FOUND` | 404 | | no |
+| `CANNOT_MODIFY_ADMIN` | 422 | | no: admins can't act on admin accounts, their own included |
+
 Codes any endpoint can return:
 
 | Code | HTTP | When |
@@ -624,4 +637,4 @@ Planned in [design.md §9](design.md#9-api-v1), not implemented yet:
 | Group | Endpoints | Phase |
 |---|---|---|
 | KYC | `GET /kyc`, `POST /kyc/resubmit` | 7 |
-| Admin | `/admin/stats`, `/admin/users`, `/admin/kyc`, `/admin/transactions`, `/admin/agents/:id/float`, `/admin/fees`, `/admin/limits`, `/admin/reconcile`, `/admin/audit-logs` | 7 |
+| Admin | `/admin/stats`, `/admin/transactions`, `/admin/agents/:id/float`, `/admin/fees`, `/admin/limits`, `/admin/reconcile` (`/admin/kyc`, `/admin/users` and `/admin/audit-logs` are built in 7a; documented here in Task 8) | 7b |
