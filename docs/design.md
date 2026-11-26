@@ -492,10 +492,13 @@ The 4 money POSTs require an `Idempotency-Key` header (a UUID): `201` for a new 
   | Token | Hex | Use |
   |---|---|---|
   | `primary` | `#EA580C` | Brand colour: icons and large text on white |
-  | `primary-dark` | `#C2410C` | App bar and home hero, buttons (white text: 5.2:1 contrast, passes WCAG AA), links, active tab; also the `theme-color` |
+  | `primary-dark` | `#C2410C` | App bar, the Home pocket block, the Sent block, primary buttons (white text: 5.2:1 contrast, passes WCAG AA), links, active tab, focus ring; also the `theme-color` |
   | `primary-darker` | `#9A3412` | Button hover/pressed |
   | `primary-light` | `#F97316` | Illustrations (never behind small text) |
-  | `primary-50` | `#FFF7ED` | Soft tinted backgrounds: selected rows, info boxes |
+  | `primary-50` | `#FFF7ED` | Soft tinted backgrounds: selected rows, info boxes, the hold-to-send button |
+  | `thread` | `#FED7AA` | The Kantha stitch on `primary-dark`: the Home pocket, the Sent ring (decorative, no contrast minimum) |
+  | `thread-dark` | `#FDBA74` | The stitch on white or `primary-50`: the hold-to-send button |
+  | `thread-muted` | `#CBD5E1` | The stitch as a receipt tear line on a white card |
   | `canvas` | `#F8FAFC` | Page background behind the phone frame |
   | `surface` | `#FFFFFF` | Main background and cards |
   | `surface-sunken` | `#F1F5F9` | Loading skeletons, disabled fields, keypad keys |
@@ -509,12 +512,14 @@ The 4 money POSTs require an `Idempotency-Key` header (a UUID): `201` for a new 
   | `danger` | `#DC2626` | Errors and money-out amounts (4.8:1, fine as text) |
   | `container-phone` | `420px` | Max width of the phone-width app frame (`max-w-phone`) |
   | `ease-out-quint` | `cubic-bezier(0.22, 1, 0.36, 1)` | Easing for hover/press (150ms) and reveals (200ms) |
+  | `font-display` / `font-sans` | Anek Bangla / Hind Siliguri | Titles and amounts / everything else (§11.3) |
+  | `text-hero` | `4rem` (64px) | The keypad amount and the Sent amount |
 
   White text on plain `#EA580C` is only 3.6:1 contrast, so every orange surface that carries white text (app bar, home hero, buttons) is `primary-dark`.
 - **Detailed UI rules:** `design/TASTE.md` (source of truth for visual decisions).
-- **Customer home:** the orange app bar flows into a hero block with the balance (tap to reveal), action grid (Send Money, Cash Out, Payment, History), recent transactions and a bottom nav (Home · History · Profile).
-- **Transfer flow:** enter details (the amount on the phone's own numeric keypad) → preview (a receipt-style card: receiver, amount, fee, total) → PIN → success receipt (share, or copy the TrxID; on plain http, where neither API exists, an `execCommand('copy')` fallback, and failing that a toast showing the TrxID).
-- **Login page:** "Try demo" buttons for Customer, Agent, Merchant and Admin.
+- **Customer home:** a flat `primary-dark` block with the greeting and the stitched pocket holding the balance (tap to reveal), the white action panel overlapping its lower edge (Send Money, Cash Out, Payment, History), recent transactions and a bottom nav (Home · History · Profile).
+- **Transfer flow:** Enter (the receiver card, the amount on an on-screen `৳` keypad with quick chips, the fee from preview) → **Confirm** (one screen: the receipt-style card with receiver, amount, fee, note, the stitched tear line and the total, then the PIN and hold to send) → **Sent** (share, or copy the TrxID; on plain http, where neither API exists, an `execCommand('copy')` fallback, and failing that a toast showing the TrxID). Details in §11.3.
+- **Login page:** "Try demo" cards for Customer, Agent, Merchant and Admin: the role as an Anek Bangla title, the seeded number underneath.
 - **Registration wizard:**
   - a progress bar (4 steps)
   - camera/gallery image picker with preview, retake and a size check before upload
@@ -522,26 +527,53 @@ The 4 money POSTs require an `Idempotency-Key` header (a UUID): `201` for a new 
 - **KYC pending screen:** a friendly "Your account is under review" page; money actions are disabled until approval.
 - **States everywhere:** loading skeletons, empty states, translated errors (a toast for a failed action, and the generic error toast for any uncaught error or rejected promise; an inline alert that stays on screen when a page's data fails to load), and money actions disabled, not hidden, while KYC is pending or rejected.
 - **Accessibility basics:** labels on inputs, visible focus, enough colour contrast.
-- **Home hero:** the app bar's `primary-dark` continues into a block with `rounded-b-3xl` corners that holds the balance (white text at 5.2:1, so the small "Balance" label is fine). No gradients anywhere.
+- **Home hero:** a `primary-dark` block with `rounded-b-3xl` corners holds the greeting and the stitched pocket with the balance (white text at 5.2:1, so the small labels are fine). No gradients anywhere.
 
 ### 11.1 Language and font
 
-- **English and Bangla**, switched by a toggle in the header (and on Profile). Every user-facing string goes through i18next, with a key in both `en.json` and `bn.json`; a test fails the suite when a Bangla key is missing.
+- **English and Bangla**, switched by a single pill in the header (and on Profile) that names the other language in that language ("বাংলা" while in English, "English" while in Bangla), with `lang` set to it. Every user-facing string goes through i18next, with a key in both `en.json` and `bn.json`; a test fails the suite when a Bangla key is missing.
 - **Bangla digits in Bangla mode:** amounts, counts and dates use `bn-BD` (`৳৯,৩৯৫.০০`, `২৫ নভে, ২০২৬`), with the same lakh grouping as English (`en-IN`). Inputs accept both digit sets. Phone numbers and TrxIDs stay in ASCII digits.
 - **API errors are mapped to translated messages** (`errors.<CODE>`); an unknown code shows a generic message, never the server's `message`.
 - `<html lang>` follows the language. The choice is the only thing kept in `localStorage` (`pocketpay.lang`).
-- **Font:** Noto Sans Bengali (from `@fontsource/noto-sans-bengali`, bundled) for Bangla script and `৳` only, through its `unicode-range`; Latin text stays on the system font, so an English-only visit downloads no font. Weights 400, 500 and 600.
+- **Fonts:** Anek Bangla and Hind Siliguri, both self-hosted through Fontsource and both covering Latin, Bangla and `৳`, so English and বাংলা share one look (§11.3).
+- **Dates:** receipts show the full date and time; history and recent rows show a relative date, always in Dhaka time (`formatWhen`): "7:42 pm" today, "Yesterday" / "গতকাল" (from `Intl.RelativeTimeFormat`, so no extra strings), "23 Nov" this year, "31 Dec 2025" before that. A row just after Dhaka midnight is "today" even when the UTC date says otherwise.
 
 ### 11.2 Client architecture
 
 - **Stack:** React 19, Vite, Tailwind v4 (all visual values in the `@theme` block of `client/src/index.css`), React Router, TanStack Query (server state), Zustand (session and language), axios, react-hook-form + zod, lucide-react icons.
 - **Session in memory:** the access token and user live only in a Zustand store, never in `localStorage` or `sessionStorage`. On start, the app calls `POST /auth/refresh` (the httpOnly cookie) to restore the session; until it settles, guarded pages show a skeleton. The session's user is kept in sync with every `GET /me`, so a KYC approval enables the money actions without a new login.
 - **Single-flight refresh:** a `401 UNAUTHENTICATED` starts one shared refresh, and every waiting request is retried once with the new token. A `409 REFRESH_IN_PROGRESS` is retried once after about 300 ms; any other refresh failure clears the session (→ `/login`). Login, registration and refresh requests are never refreshed.
-- **Idempotency key per confirm screen:** a v4 UUID (from `crypto.getRandomValues`: `crypto.randomUUID` only exists in secure contexts, and `dev:phone` is plain http) is created when the user reaches the PIN step and reused for every retry of that confirm, so a double tap or a network retry replays instead of paying twice. Going back and changing the transfer gets a new key.
+- **Idempotency key per payment:** a v4 UUID (from `crypto.getRandomValues`: `crypto.randomUUID` only exists in secure contexts, and `dev:phone` is plain http) is created when Confirm first opens and sent as `Idempotency-Key` on every attempt, so a double hold or a network retry replays instead of paying twice. It is kept across retries, Back and return, and a changed note; only a different receiver or amount gets a new key. Back and every edit are disabled while the POST is pending.
 - **Money in the client:** amounts stay poisha strings; maths uses `BigInt`. One display helper (`formatTaka`) and one input parser (`takaToPoisha`, at most 2 decimals, no floats).
 - **Cache cleared on logout:** when the session becomes anonymous (logout or a failed refresh), the TanStack Query cache is cleared, so the next person on the same phone never sees the previous user's balance or history.
 - **Retries:** a query retries once, and only on a network error or a 5xx; a mutation never retries on its own.
 - **Routes and roles:** `/` is each role's home; a page of another role, or a money route for a non-ACTIVE user, redirects to `/`. Login and the homes are in the main bundle; registration, history, receipts, profile and the money flows are code-split (`React.lazy`) and show the same skeleton while their chunk loads.
+
+### 11.3 The Kantha look (Phase 6b)
+
+The approved direction is the canvas "PocketPay redesign: Kantha direction" (screenshots in `design/references/kantha-*.png`); `design/TASTE.md` holds the working rules.
+
+- **Colour:** orange and white. `primary-dark` carries the app bar, the Home pocket block, the Sent block and primary buttons. The stitch uses the three `thread` tokens (§11 table). No gradients anywhere.
+- **Fonts:** self-hosted through Fontsource, bundled by Vite (no font CDN):
+  - **Anek Bangla** (`@fontsource-variable/anek-bangla/wdth.css`, variable weight and width) for titles and amounts (`font-display`). Hero amounts use `font-amount`: Anek Bangla at its narrow width (`font-stretch: 80%`) with `tabular-nums`. Titles stay at normal width with no letter spacing; Anek's own word space is narrow (0.17 em at semibold against Hind Siliguri's 0.24 em), so titles read tighter than body text by design.
+  - **Hind Siliguri** (`@fontsource/hind-siliguri`, 400/500/600) for everything else (`font-sans`, the page default).
+- **The Kantha running stitch** is the one signature detail: an SVG stroke with round caps and a `7 9` dash, drawn only by `components/ui/Stitch.tsx` (`rect`, `line`, `circle`, always `aria-hidden`). It appears in exactly four places: the **Home pocket** around the balance, the **hold-to-send button**, the **receipt tear lines** (Confirm, Sent, the receipt page), and the **ring on the Sent screen**. Nowhere else.
+- **Hold to send** (`HoldToSendButton`) replaces the send tap on Confirm:
+  - one constant, `HOLD_MS = 1200` (1.2 s), drives both the timer and the fill's CSS transition (`--hold-ms`);
+  - pointer down captures the pointer (a finger sliding off doesn't cancel); letting go, `pointercancel` or blur resets;
+  - **Enter or Space held** does the same for keyboard users;
+  - `navigator.vibrate(30)` when the hold completes, where the browser has it;
+  - no long-press menu: the context menu is prevented, plus `callout-none`, `select-none` and `touch-none`;
+  - **only a completed hold submits**; a short press sends nothing. Under reduced motion the fill shows at once, but the hold time still applies;
+  - the label names the flow and the total ("Hold to send ৳505.00", "Hold to cash out …").
+- **Idempotency-Key rules are unchanged** by the redesign (§11.2): one key per payment, made when Confirm opens, replayed on retry; only a new receiver or amount gets a new key.
+- **Sent screen:** no app bar; a `primary-dark` block with the stitched ring, a white disc where the tick draws itself, "Money sent", the amount (`font-amount text-hero`) rising into place, and "to Karim H\*\*\* · 01800000003". Under it, the receipt card overlaps the block, then Share and Done. "Money sent" is the title for all four flows. The tick and the rise are the one signature moment; both stop under reduced motion.
+- **`ReceiptCard`** (`features/transfer/ReceiptCard.tsx`) is shared by the Sent screen and the receipt page (`/transactions/:trxId`): TrxID, time, fee, "Total paid" signed and red (or "Received +…" in green for money in), the tear line with a notch at each edge, and the **New balance** from `mine.balanceAfter` as the card's hero. Share keeps its fallbacks.
+- **Screen transitions:** React's `<ViewTransition>`, in the stable build of React 19.3.1 (exported under its plain name). One shared name, `amount`, wraps the keypad amount and Confirm's total, so the amount morphs from the keypad to Confirm only (Chromium: a 250 ms `::view-transition-group(amount)`). The step changes (Next → Confirm, success → Sent, Back) run in `startTransition`. The Sent amount has no `<ViewTransition>`: it lands with its own rise, the signature moment (decision AH). Into Sent, Chromium runs no view transition at all: the screen switches and the amount rises. Browsers without the API just switch screens. Under `prefers-reduced-motion` the view-transition pseudo-elements get `animation: none`, so nothing moves.
+- **Pocket tilt** (`usePocketTilt`): the Home pocket tilts with the phone (`DeviceOrientationEvent`), at most ±6°, only in a secure context (plain-http LAN stays flat), only with reduced motion off, and it never asks for permission on load (iOS sends no events without a tap, so the pocket stays flat there).
+- **Language toggle:** one pill, not two buttons (§11.1).
+- **PIN input:** five boxes in a full-width 5-column grid over one invisible `type="password"` input, so paste and the phone's number pad work and the PIN is never React state. Confirm adds a lock icon beside the label (`lock`).
+- **Type scale:** at most four sizes and two weights per screen. The keypad keys are `font-display text-xl font-semibold`; the canvas's larger keys would be a fifth size on the amount screen.
 
 ---
 
@@ -662,6 +694,16 @@ The 4 money POSTs require an `Idempotency-Key` header (a UUID): `201` for a new 
 - X. **OTP "Resend"** waits for the server's `resendInSeconds`, and restarts its countdown from `retryAfterSeconds` on `OTP_COOLDOWN`.
 - Y. **Change photo uploads as soon as a photo is picked**; Change PIN is its own page and logs out the user's other devices (the server revokes their sessions).
 - Z. **A page's load error is an inline alert, not a toast** (§11), so a failed balance or list doesn't vanish after a few seconds.
+
+**Phase 6b, the Kantha redesign (2026-11-26):**
+- AA. **Hold to send instead of a tap** on Confirm (§11.3): a 1.2 s hold by touch, mouse or Enter/Space, and only a completed hold submits. A money action now takes a deliberate gesture, so a stray tap can't pay. The Idempotency-Key rules are unchanged. This also replaces U's phone keypad with an on-screen `৳` keypad (a physical keyboard still types).
+- AB. **"Money sent" is the Sent title for all four flows** (it was "Successful"). The person on that screen has always sent money, so it is true for Cash Out, Payment and Cash In too.
+- AC. **"Total paid" is signed and red** (`−৳505.00`), where the canvas shows a plain `৳505.00`; money in reads **"Received +৳…" in green**. It follows the sign rule (the sign carries the meaning, colour backs it up), and red can't sit on the orange hero.
+- AD. **`<ViewTransition>` instead of CSS-only transitions**, because it is in the stable React 19.3.1 build. It gives a real shared amount from the keypad to Confirm (Sent uses the rise instead, see AH); browsers without the View Transitions API just switch screens, and reduced motion turns it off.
+- AE. **Fontsource Anek Bangla + Hind Siliguri replace Noto Sans Bengali.** Both cover Latin and Bangla, so English and বাংলা share one look; Anek's width axis gives the narrow amounts. The cost is that an English-only visit now downloads fonts too.
+- AF. **A global `jest.advanceTimersByTime` shim in `client/src/test/setup.ts`.** Testing Library moves fake timers only through a global `jest` (its `asyncWrapper` and `waitFor` look for one), and vitest has none. Without it, every user-event call in the hold tests waited forever on a frozen clock. With the shim the clock moves only when a test moves it, so the hold boundary is exact (1199 ms sends nothing, 1200 ms sends). It has no effect while timers are real.
+- AG. **History filters are chips that scroll sideways** (a fieldset of radio chips): a customer's five types don't fit at 390px. The canvas has no History screen.
+- AH. **The amount doesn't morph into Sent; it rises instead.** When the morph ran, the Sent amount was still invisible (the rise holds it at `opacity: 0` for its 500 ms delay), so Confirm's total flew up and faded into nothing, then the amount rose on its own. The two cancel out, so one had to go, and the rise is TASTE's one signature moment. The numbers differ too (৳505.00 total → ৳500.00 sent), so a morph between them read oddly anyway.
 
 ## 16. Left to the builder
 - Exact component styling within the §11 palette (decided in Phase 6).

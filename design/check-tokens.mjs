@@ -9,7 +9,7 @@
 //   shadow     shadow-sm/md/xl/2xl (cards use borders; only shadow-lg for floating things)
 //   status     text-success / text-warning (fail AA as text; use the -dark colours, or mark
 //              design-ok when the class only colours an icon)
-//   gradient   gradient utilities (allowed only on the balance card, mark it design-ok)
+//   gradient   gradient utilities (banned everywhere: TASTE.md, the Home block is flat primary-dark)
 //   color      raw hex/rgb()/hsl() colours
 //   size       raw px / ms values in CSS or in style props
 //   emoji      emoji in UI code (use icons)

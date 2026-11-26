@@ -51,7 +51,7 @@ export function AmountField({ label, text, onTextChange, ref }: AmountFieldProps
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0'] as const
 const KEY =
-  'flex h-14 items-center justify-center rounded-2xl bg-surface-sunken font-display text-xl text-text transition duration-150 ease-out-quint hover:bg-border active:scale-95'
+  'flex h-14 items-center justify-center rounded-2xl bg-surface-sunken font-display text-xl font-semibold text-text transition duration-150 ease-out-quint hover:bg-border active:scale-95'
 
 /** 1–9, the point, 0 and delete, in the language's digits. */
 export function AmountKeypad({ text, onTextChange }: Omit<AmountFieldProps, 'label' | 'ref'>) {

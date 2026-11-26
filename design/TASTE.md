@@ -27,11 +27,12 @@
 
 - Drawn only by `components/ui/Stitch.tsx` (`shape="rect" | "line" | "circle"`): an SVG stroke with
   round caps and a `7 9` dash. It is decorative (`aria-hidden`); never the only carrier of meaning.
-- It appears in exactly three places: the Home pocket around the balance, the hold-to-send button,
-  and receipt tear lines (Confirm, Sent, the receipt page). Nowhere else: not on cards, dividers,
-  inputs or empty states. A fourth use needs asking first.
-- Thread colours: `stroke-thread` on orange, `stroke-thread-dark` on white or `primary-50`,
-  `stroke-thread-muted` for the tear line on a white card.
+- It appears in exactly four places: the Home pocket around the balance, the hold-to-send button,
+  receipt tear lines (Confirm, Sent, the receipt page), and the ring around the tick on the Sent
+  screen. Nowhere else: not on cards, dividers, inputs or empty states. A fifth use needs asking
+  first.
+- Thread colours: `stroke-thread` on orange (the pocket, the Sent ring), `stroke-thread-dark` on
+  white or `primary-50`, `stroke-thread-muted` for the tear line on a white card.
 
 ## Money display
 
@@ -69,8 +70,11 @@
 - Two families, both self-hosted from Fontsource and both covering Latin and Bangla, so English
   and বাংলা share one look:
   - `font-display` (Anek Bangla, variable with a width axis): amounts, the app-bar title, screen
-    titles.
+    titles, the keypad keys (`text-xl font-semibold`).
   - `font-sans` (Hind Siliguri, the default): everything else.
+- Only amounts get the narrow width (`font-amount`). Titles use `font-display` at normal width with
+  no letter spacing. Anek's own word space is narrow (0.17 em vs Hind's 0.24 em), so titles look
+  tighter than body text; that is the font, not a bug. Don't add negative tracking or narrow them.
 - Sizes: `text-xs`, `text-sm`, `text-base`, `text-lg`, `text-xl`, `text-3xl`; `text-4xl` for the
   Home balance; `text-hero` (64px) for the keypad amount and the Sent amount. At most four sizes on
   one screen. Inputs are always `text-base` or larger so phones do not zoom in.
@@ -128,7 +132,8 @@
 - Everything else is feedback to a touch: `active:scale-95`, `duration-150`, `ease-out-quint`
   (`duration-200` for reveals).
 - Screen transitions use React's `<ViewTransition>`; the amount is the shared element from the
-  keypad to Confirm to Sent. Browsers without the View Transitions API just navigate.
+  keypad to Confirm only. Sent's amount rises instead (a morph into it would land on an invisible
+  amount). Browsers without the View Transitions API just navigate.
 - The Home pocket may tilt (at most ±6°) from `DeviceOrientationEvent`, only in a secure context,
   only with reduced motion off, and never with a permission prompt on load. On plain-http LAN it
   stays flat.
@@ -142,7 +147,7 @@ actions while KYC is pending.
 ## Banned by default
 
 - Gradients, everywhere (the Home block is flat `primary-dark`).
-- The stitch outside its three places, or any other dashed or "craft" decoration.
+- The stitch outside its four places, or any other dashed or "craft" decoration.
 - Emoji as icons. Use one icon set, `lucide-react` (ask before adding a dependency).
 - Marketing-style feature cards (a row of three icon-topped cards). The home action grid
   (Send Money, Cash Out, Payment, History) is the one allowed icon grid.
@@ -158,4 +163,4 @@ If a screen genuinely needs one of these, say so and ask first.
 2. Every gap is the same value. Give the amount room, tighten related pairs.
 3. Text runs the full width of the screen with no hierarchy. Make the amount large and the
    labels small and muted.
-4. The stitch is spreading. Take it back to its three places.
+4. The stitch is spreading. Take it back to its four places.

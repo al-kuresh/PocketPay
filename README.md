@@ -2,7 +2,7 @@
 
 A mobile-first digital wallet (bKash-style) built as a full-stack, production-grade project.
 
-> 🚧 Work in progress — **Phase 6 (frontend) complete**: the mobile web app for customers, agents and merchants, in English and Bangla. Log in (or tap a demo account), register with OTP, NID and photos, see your balance, send money, cash in, cash out and pay a merchant (enter details → preview → PIN → receipt), browse history and receipts, and change your PIN, photo and language. Next up: Phase 7 (admin panel and KYC review).
+> 🚧 Work in progress — **Phase 6b (the Kantha redesign) complete**: the mobile web app for customers, agents and merchants, in English and Bangla, with an orange-and-white look and a hand-stitched Kantha detail. Log in (or tap a demo account), register with OTP, NID and photos, see your balance, send money, cash in, cash out and pay a merchant (enter the amount on the keypad → check it on one Confirm screen with your PIN → hold to send → Money sent), browse history and receipts, and change your PIN, photo and language. Next up: Phase 7 (admin panel and KYC review).
 
 ## Features (planned for v1)
 - Registration with phone, OTP, 10-digit NID, and NID/selfie photo upload

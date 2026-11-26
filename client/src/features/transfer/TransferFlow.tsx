@@ -21,7 +21,7 @@ import { formatTaka, takaToPoisha } from '../../lib/money'
 import { phoneSchema } from '../../lib/validation'
 import { useLanguage } from '../../stores/language'
 import { FLOWS, type Flow } from './flows'
-import { Counterparty, ReceiptCard, ShareButton } from './ReceiptCard'
+import { Counterparty, ReceiptCard, ShareButton, TearLine } from './ReceiptCard'
 
 type Step = 'enter' | 'confirm' | 'receipt'
 
@@ -82,7 +82,7 @@ export function TransferFlow({ type }: { type: TxType }) {
   function openConfirm(p: Preview) {
     const phone = p.receiver.phone ?? ''
     if (!key || key.phone !== phone || key.amount !== p.amount) setKey({ value: uuidV4(), phone, amount: p.amount })
-    // In a transition, so <ViewTransition name="amount"> carries the amount from the keypad to Confirm to Sent.
+    // In a transition, so <ViewTransition name="amount"> carries the amount from the keypad to Confirm.
     startTransition(() => {
       setPreview(p)
       setStep('confirm')
@@ -201,13 +201,14 @@ function EnterStep({ type, flow, details, onChange, onNext }: EnterStepProps) {
             <Initials name={receiver.name} />
             <div className="flex min-w-0 flex-1 flex-col">
               <span className="truncate text-base font-semibold text-text">{receiver.name}</span>
-              {/* Still the receiver field, read-only, so the number keeps its label for screen readers (and Back). */}
+              {/* Still the receiver field, read-only, so the number keeps its label for screen readers (and Back).
+                  Not tappable either: focusing a 14px input zooms an iPhone. Change edits it. */}
               <input
                 readOnly
                 tabIndex={-1}
                 aria-label={t(`flows.${type}.receiver`)}
                 value={details.phone}
-                className="min-w-0 bg-transparent text-sm tabular-nums text-text-muted"
+                className="pointer-events-none min-w-0 bg-transparent text-sm tabular-nums text-text-muted"
               />
             </div>
             <button
@@ -331,12 +332,7 @@ function ConfirmStep({ flow, preview, note, onNoteChange, idempotencyKey, onSucc
             className="h-12 min-w-0 flex-1 rounded-xl border border-border-strong bg-surface px-3 text-right text-base text-text disabled:bg-surface-sunken"
           />
         </div>
-        {/* The receipt's tear: a notch at each edge (in the page colour) and the stitched line between them. */}
-        <div aria-hidden className="relative h-6">
-          <span className="absolute -left-3 top-0 size-6 rounded-full border border-border bg-canvas" />
-          <Stitch shape="line" className="absolute inset-x-6 top-0 h-6 stroke-thread-muted" />
-          <span className="absolute -right-3 top-0 size-6 rounded-full border border-border bg-canvas" />
-        </div>
+        <TearLine />
         <div className="flex items-baseline justify-between gap-3 p-6 pt-4">
           <p className="text-base text-text-muted">{t('transfer.total')}</p>
           <ViewTransition name="amount">
@@ -413,11 +409,10 @@ function SentView({ receipt }: { receipt: Receipt }) {
           <h1 id={headingId} className="mt-3 font-display text-xl font-semibold">
             {t('transfer.success')}
           </h1>
-          <ViewTransition name="amount">
-            <p className="font-amount text-hero font-semibold animate-rise motion-reduce:animate-none">
-              {formatTaka(receipt.amount, { lang })}
-            </p>
-          </ViewTransition>
+          {/* No <ViewTransition name="amount"> here: the rise is Sent's landing, and a morph would fly into a still-invisible amount. */}
+          <p className="font-amount text-hero font-semibold animate-rise motion-reduce:animate-none">
+            {formatTaka(receipt.amount, { lang })}
+          </p>
           <Counterparty receipt={receipt} />
         </div>
         <div className="-mt-12 flex flex-1 flex-col gap-6 px-6 pb-6">
@@ -435,8 +430,8 @@ function SentView({ receipt }: { receipt: Receipt }) {
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-sm text-text-muted">{label}</dt>
-      <dd className="text-right text-sm tabular-nums text-text">{children}</dd>
+      <dt className="text-base text-text-muted">{label}</dt>
+      <dd className="text-right text-base tabular-nums text-text">{children}</dd>
     </div>
   )
 }

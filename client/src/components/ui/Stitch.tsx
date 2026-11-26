@@ -8,7 +8,7 @@ interface StitchProps {
 // The Kantha running stitch: round caps and a 7 9 dash, the same everywhere it appears.
 const THREAD = { fill: 'none', strokeWidth: 2, strokeLinecap: 'round', strokeDasharray: '7 9' } as const
 
-/** The one signature detail (TASTE.md): only the Home pocket, hold to send and receipt tear lines. Decorative. */
+/** The one signature detail (TASTE.md): only the Home pocket, hold to send, receipt tear lines and the Sent ring. Decorative. */
 export function Stitch({ shape, className = '' }: StitchProps) {
   return (
     // overflow-visible: the stroke is centred on the edge, so half of it falls outside the box.

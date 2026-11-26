@@ -44,18 +44,24 @@ export function ReceiptCard({ receipt }: { receipt: Receipt }) {
           {formatTaka(receipt.mine.amount.replace(/^[-+]/, ''), { sign: out ? 'out' : 'in', lang })}
         </Row>
       </dl>
-      {/* The receipt's tear: a notch at each edge (in the page colour) and the stitched line between them. */}
-      <div aria-hidden className="relative h-6">
-        <span className="absolute -left-3 top-0 size-6 rounded-full border border-border bg-canvas" />
-        <Stitch shape="line" className="absolute inset-x-6 top-0 h-6 stroke-thread-muted" />
-        <span className="absolute -right-3 top-0 size-6 rounded-full border border-border bg-canvas" />
-      </div>
+      <TearLine />
       <dl className="p-6 pt-4">
         <div className="flex items-baseline justify-between gap-3">
           <dt className="text-base text-text-muted">{t('transfer.balanceAfter')}</dt>
           <dd className="font-amount text-3xl font-semibold text-text">{formatTaka(receipt.mine.balanceAfter, { lang })}</dd>
         </div>
       </dl>
+    </div>
+  )
+}
+
+/** The receipt's tear (Confirm, Sent, the receipt page): a notch at each edge (in the page colour) and the stitched line between them. */
+export function TearLine() {
+  return (
+    <div aria-hidden className="relative h-6">
+      <span className="absolute -left-3 top-0 size-6 rounded-full border border-border bg-canvas" />
+      <Stitch shape="line" className="absolute inset-x-6 top-0 h-6 stroke-thread-muted" />
+      <span className="absolute -right-3 top-0 size-6 rounded-full border border-border bg-canvas" />
     </div>
   )
 }

@@ -116,7 +116,7 @@ const HOLD_MS = 1200
 type FlowType = 'SEND_MONEY' | 'CASH_OUT' | 'PAYMENT' | 'CASH_IN'
 /** The hold button's label for a flow ("Hold to cash out ৳505.00"), in English unless `dict` is bn. */
 const holdLabel = (type: FlowType, total = '৳505.00', dict: typeof en = en) => dict.flows[type].hold.replace('{{amount}}', total)
-const holdToSend = (total = '৳505.00') => holdLabel('SEND_MONEY', total)
+const sendHoldLabel = (total = '৳505.00') => holdLabel('SEND_MONEY', total)
 
 afterEach(() => {
   vi.useRealTimers()
@@ -141,7 +141,7 @@ async function hold(user: User, name: string, ms = HOLD_MS) {
   realTimers()
 }
 
-async function submitPin(user: User, button = holdToSend()) {
+async function submitPin(user: User, button = sendHoldLabel()) {
   await user.type(pinField()!, '48213')
   await hold(user, button)
 }
@@ -293,7 +293,7 @@ describe('TransferFlow: Send Money', () => {
     await user.type(amount, '600')
     await user.click(screen.getByRole('button', { name: en.transfer.next }))
     await atConfirm()
-    await submitPin(user, holdToSend('৳605.00'))
+    await submitPin(user, sendHoldLabel('৳605.00'))
 
     expect(await screen.findByText('PP7K2M9QXA')).toBeInTheDocument()
     expect(posts).toHaveLength(2)
@@ -355,7 +355,7 @@ describe('TransferFlow: Send Money', () => {
     await atConfirm()
     await submitPin(user)
 
-    expect(await screen.findByRole('button', { name: holdToSend(), busy: true })).toBeDisabled()
+    expect(await screen.findByRole('button', { name: sendHoldLabel(), busy: true })).toBeDisabled()
     expect(screen.getByRole('button', { name: en.common.back })).toBeDisabled()
     expect(pinField()).toBeDisabled()
     expect(screen.getByLabelText(en.transfer.note)).toBeDisabled()
@@ -637,7 +637,7 @@ describe('the amount screen: keypad, chips, fee from preview', () => {
     expect(previews).toHaveLength(2)
     expect(screen.getByText('৳10.00')).toBeInTheDocument()
     expect(screen.getByText('৳510.00')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: holdToSend('৳510.00') })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: sendHoldLabel('৳510.00') })).toBeInTheDocument()
   })
 
   it('the note is not on the amount screen (it is on Confirm)', async () => {
@@ -668,6 +668,14 @@ describe('the amount screen: keypad, chips, fee from preview', () => {
     expect(receiverField()).toHaveValue('')
     expect(receiverField()).toHaveFocus()
   })
+
+  it("the card's number can't be tapped into focus (a 14px input would zoom an iPhone): Change is the way to edit it", async () => {
+    const { user } = await renderPage('/send-money')
+    await toAmount(user)
+    expect(receiverField()).toHaveAttribute('readonly')
+    expect(receiverField()).toHaveAttribute('tabindex', '-1')
+    expect(receiverField()).toHaveClass('pointer-events-none')
+  })
 })
 
 describe('Confirm: hold to send', () => {
@@ -683,7 +691,7 @@ describe('Confirm: hold to send', () => {
     await enterDetails(rendered.user)
     await atConfirm()
     await rendered.user.type(pinField()!, '48213')
-    return { ...rendered, button: screen.getByRole('button', { name: holdToSend() }) }
+    return { ...rendered, button: screen.getByRole('button', { name: sendHoldLabel() }) }
   }
 
   it('one Confirm screen: the receipt card (receiver, amount, fee, note, stitched tear line, total), the PIN and the hold button', async () => {
@@ -788,7 +796,7 @@ describe('Confirm: hold to send', () => {
     try {
       const { user } = await ready()
       fakeTimers()
-      await user.pointer({ keys: '[MouseLeft>]', target: screen.getByRole('button', { name: holdToSend() }) })
+      await user.pointer({ keys: '[MouseLeft>]', target: screen.getByRole('button', { name: sendHoldLabel() }) })
       wait(HOLD_MS - 1)
       expect(vibrate).not.toHaveBeenCalled()
       expectNothingSent()
@@ -806,7 +814,7 @@ describe('Confirm: hold to send', () => {
     await enterDetails(user)
     await atConfirm()
     await user.type(pinField()!, '4821')
-    const button = screen.getByRole('button', { name: holdToSend() })
+    const button = screen.getByRole('button', { name: sendHoldLabel() })
     expect(button).toBeDisabled()
     fakeTimers()
     fireEvent.pointerDown(button, { button: 0, pointerId: 1 })
@@ -830,7 +838,7 @@ describe('Confirm: hold to send', () => {
   it('NETWORK_ERROR: the note can still be changed on Confirm, and "Try again" is a new hold with the SAME key', async () => {
     answers = ['network']
     const { user } = await ready()
-    await hold(user, holdToSend())
+    await hold(user, sendHoldLabel())
     expect(await screen.findByText(en.errors.NETWORK_ERROR)).toBeInTheDocument()
     await user.type(screen.getByLabelText(en.transfer.note), 'rent')
 
